@@ -9,6 +9,7 @@ import {
 const SmartInput = ({ label, value, onChange, unit, step = "0.01" }) => {
   // We use a local state to hold EXACTLY what the user types (even "10.")
   const [localValue, setLocalValue] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
 
   // Sync local value if the parent changes it externally (e.g. loading a preset)
   useEffect(() => {
@@ -25,6 +26,7 @@ const SmartInput = ({ label, value, onChange, unit, step = "0.01" }) => {
   };
 
   const handleBlur = () => {
+    setIsFocused(false);
     // When user leaves the field, clean it up
     if (localValue === '' || isNaN(localValue)) {
       setLocalValue(value); // Revert to last good value
@@ -33,22 +35,39 @@ const SmartInput = ({ label, value, onChange, unit, step = "0.01" }) => {
     }
   };
 
+  const handleFocus = () => {
+    setIsFocused(true);
+  };
+
   return (
-    <div className="flex flex-col space-y-1">
-      <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider">{label}</label>
-      <div className="relative group">
+    <div className="flex flex-col space-y-1.5 group">
+      <label className="text-[10px] text-slate-400 font-medium uppercase tracking-wider transition-colors group-hover:text-slate-300">
+        {label}
+      </label>
+      <div className="relative">
         <input
           type="number"
           step={step}
           value={localValue}
           onChange={handleChange}
           onBlur={handleBlur}
-          inputMode="decimal" // 📱 Forces the right keyboard on Samsung
-          className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg p-3 pr-8 
-                     focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all
-                     group-hover:border-slate-600 font-mono text-right"
+          onFocus={handleFocus}
+          inputMode="decimal"
+          className={`w-full bg-slate-800/50 backdrop-blur-sm text-white border rounded-xl p-3 pr-10
+                     transition-all duration-200 ease-in-out font-mono text-right text-sm
+                     ${isFocused 
+                       ? 'border-blue-500/50 ring-2 ring-blue-500/20 shadow-lg shadow-blue-500/10 bg-slate-800' 
+                       : 'border-slate-700/50 hover:border-slate-600/50 hover:bg-slate-800/70'
+                     }
+                     focus:outline-none placeholder:text-slate-600`}
         />
-        <span className="absolute right-3 top-3 text-slate-500 text-sm font-bold pointer-events-none">{unit}</span>
+        {unit && (
+          <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold pointer-events-none transition-colors ${
+            isFocused ? 'text-blue-400' : ''
+          }`}>
+            {unit}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -56,9 +75,13 @@ const SmartInput = ({ label, value, onChange, unit, step = "0.01" }) => {
 
 // --- COMPONENT: Sticky Stat Card ---
 const StatCard = ({ label, value, color, isGood }) => (
-  <div className={`flex flex-col p-2 sm:p-3 rounded-lg border ${isGood ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-rose-900/20 border-rose-500/30'}`}>
-    <span className="text-[10px] sm:text-xs text-slate-400 uppercase">{label}</span>
-    <span className={`text-lg sm:text-xl font-bold ${color}`}>{value}</span>
+  <div className={`flex flex-col p-3 sm:p-4 rounded-xl border backdrop-blur-sm transition-all duration-300 hover:scale-105 hover:shadow-lg
+    ${isGood 
+      ? 'bg-gradient-to-br from-emerald-900/30 to-emerald-800/20 border-emerald-500/40 hover:border-emerald-400/60 hover:shadow-emerald-500/20' 
+      : 'bg-gradient-to-br from-rose-900/30 to-rose-800/20 border-rose-500/40 hover:border-rose-400/60 hover:shadow-rose-500/20'
+    }`}>
+    <span className="text-[9px] sm:text-[10px] text-slate-400 uppercase tracking-widest font-semibold mb-1">{label}</span>
+    <span className={`text-base sm:text-lg font-bold ${color} transition-all duration-200`}>{value}</span>
   </div>
 );
 
@@ -109,10 +132,51 @@ function FinancialTable() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      // Map frontend field names to backend field names
+      const capacityFactor = debouncedInputs.capacity_factor || 0.85;
+      const capacityMW = debouncedInputs.capacity_mw || 50;
+      const capacityKW = capacityMW * 1000;
+      // Generation = Capacity (MW) * Capacity Factor * Hours per year * 1000 (kW/MW)
+      const generationKWh = capacityMW * capacityFactor * 8760 * 1000;
+      
+      // Convert opex_per_kw (per kW capacity per year) to variable_opex_php (per kWh)
+      // If opex_per_kw is annual opex per kW of capacity, convert to per kWh:
+      const opexPerKW = debouncedInputs.opex_per_kw || 15.0;
+      const variableOpexPHP = generationKWh > 0 ? (opexPerKW * capacityKW) / generationKWh : 0;
+      
+      const backendInputs = {
+        // Macro
+        forex_rate: debouncedInputs.forex_rate || 58.0,
+        forex_escalation: debouncedInputs.forex_escalation || 0.02,
+        local_inflation: debouncedInputs.inflation_rate || 0.04,
+        
+        // Revenue
+        tariff_php: debouncedInputs.tariff || 8.50,
+        generation_kwh: generationKWh,
+        degradation_rate: debouncedInputs.degradation || 0.005,
+        
+        // Capex
+        capex_usd: (debouncedInputs.capex_per_mw || 1000000) * capacityMW / (debouncedInputs.forex_rate || 58.0),
+        capex_forex_exposure: 0.70, // Default value
+        
+        // Opex
+        fuel_cost_usd_liter: debouncedInputs.fuel_cost_per_liter || 0.90,
+        fuel_efficiency: debouncedInputs.fuel_efficiency || 3.8,
+        variable_opex_php: variableOpexPHP,
+        
+        // Debt
+        debt_ratio: debouncedInputs.debt_share || 0.70,
+        interest_rate: debouncedInputs.interest_rate || 0.08,
+        tenor_years: debouncedInputs.loan_term || 10,
+        
+        // Tax
+        tax_rate: 0.25 // Default value
+      };
+      
       const response = await fetch('https://project-finance-dashboard.onrender.com/calculate-model', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(debouncedInputs)
+        body: JSON.stringify(backendInputs)
       });
       const result = await response.json();
       if (result.annual_data) setData(result);
@@ -133,8 +197,8 @@ function FinancialTable() {
   const metrics = data?.summary_metrics || {};
   const irr = metrics.IRR != null ? (metrics.IRR * 100).toFixed(2) + "%" : "-";
   const dscr = metrics.Avg_DSCR != null ? metrics.Avg_DSCR.toFixed(2) + "x" : "-";
-  const roi = metrics.ROI != null ? (metrics.ROI * 100).toFixed(2) + "%" : "-";
-  const avgRoe = metrics.Avg_ROE != null ? (metrics.Avg_ROE * 100).toFixed(2) + "%" : "-";
+  const roi = metrics.ROI != null ? metrics.ROI.toFixed(2) + "%" : "-";
+  const avgRoe = metrics.Avg_ROE != null ? metrics.Avg_ROE.toFixed(2) + "%" : "-";
   
   // Logic: Green if IRR > 12% and DSCR > 1.15
   const isProfitable = metrics.IRR > 0.12; 
@@ -143,17 +207,22 @@ function FinancialTable() {
   const isGoodROE = metrics.Avg_ROE > 0.12; // 12% ROE threshold
 
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-white overflow-hidden font-sans">
+    <div className="flex flex-col h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white overflow-hidden font-sans">
       
       {/* 1. STICKY HEADER (Glassmorphism) */}
-      <div className="flex-none bg-slate-900/90 backdrop-blur-md border-b border-slate-800 p-3 z-50 sticky top-0">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <div className="flex items-center space-x-2">
-            <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse"></div>
-            <h1 className="text-sm font-bold text-slate-300 hidden sm:block">InfraModeler</h1>
+      <div className="flex-none bg-slate-900/80 backdrop-blur-xl border-b border-slate-800/50 shadow-lg shadow-black/20 p-4 z-50 sticky top-0">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <div className="flex items-center space-x-3">
+            <div className="relative">
+              <div className="h-3 w-3 rounded-full bg-blue-500 animate-pulse"></div>
+              <div className="absolute inset-0 h-3 w-3 rounded-full bg-blue-500 animate-ping opacity-75"></div>
+            </div>
+            <h1 className="text-base font-bold bg-gradient-to-r from-slate-200 to-slate-400 bg-clip-text text-transparent hidden sm:block">
+              InfraModeler
+            </h1>
           </div>
           
-          <div className="flex space-x-3 w-full sm:w-auto justify-end">
+          <div className="flex space-x-2 sm:space-x-3 w-full sm:w-auto justify-end overflow-x-auto scrollbar-hide">
             <StatCard label="IRR" value={irr} color={isProfitable ? "text-emerald-400" : "text-rose-400"} isGood={isProfitable} />
             <StatCard label="Avg DSCR" value={dscr} color={isBankable ? "text-emerald-400" : "text-amber-400"} isGood={isBankable} />
             <StatCard label="ROI" value={roi} color={isGoodROI ? "text-emerald-400" : "text-amber-400"} isGood={isGoodROI} />
@@ -163,47 +232,59 @@ function FinancialTable() {
       </div>
 
       {/* 2. SCROLLABLE CONTENT */}
-      <div className="flex-grow overflow-y-auto overflow-x-hidden p-4 pb-32">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="flex-grow overflow-y-auto overflow-x-hidden p-4 sm:p-6 pb-32 scrollbar-thin">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* LEFT: INPUTS */}
-          <div className="lg:col-span-1 space-y-5">
+          <div className="lg:col-span-1 space-y-6">
             
             {/* Macro Card */}
-            <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="p-2 bg-blue-500/10 rounded-lg text-blue-400">🌍</span>
-                <h3 className="font-bold text-slate-200">Macro Economics</h3>
+            <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-sm p-6 rounded-2xl border border-slate-700/50 shadow-2xl hover:shadow-blue-500/10 transition-all duration-300 hover:border-slate-600/50">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2.5 bg-gradient-to-br from-blue-500/20 to-blue-600/10 rounded-xl border border-blue-500/30">
+                  <span className="text-xl">🌍</span>
+                </div>
+                <h3 className="font-bold text-lg text-slate-100">Macro Economics</h3>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <SmartInput label="Forex" value={inputs.forex_rate} onChange={v => updateField('forex_rate', v)} unit="PHP" />
                 <SmartInput label="Inflation" value={inputs.inflation_rate} onChange={v => updateField('inflation_rate', v)} unit="%" step="0.001" />
+                <SmartInput label="Forex Escalation" value={inputs.forex_escalation} onChange={v => updateField('forex_escalation', v)} unit="%" step="0.001" />
               </div>
             </div>
 
             {/* Tech Card */}
-            <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
-              <div className="flex items-center gap-2 mb-4">
-                 <span className="p-2 bg-purple-500/10 rounded-lg text-purple-400">⚡</span>
-                <h3 className="font-bold text-slate-200">Technical Specs</h3>
+            <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-sm p-6 rounded-2xl border border-slate-700/50 shadow-2xl hover:shadow-purple-500/10 transition-all duration-300 hover:border-slate-600/50">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2.5 bg-gradient-to-br from-purple-500/20 to-purple-600/10 rounded-xl border border-purple-500/30">
+                  <span className="text-xl">⚡</span>
+                </div>
+                <h3 className="font-bold text-lg text-slate-100">Technical Specs</h3>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <SmartInput label="Capacity" value={inputs.capacity_mw} onChange={v => updateField('capacity_mw', v)} unit="MW" />
+                <SmartInput label="Capacity Factor" value={inputs.capacity_factor} onChange={v => updateField('capacity_factor', v)} unit="" step="0.01" />
                 <SmartInput label="Tariff" value={inputs.tariff} onChange={v => updateField('tariff', v)} unit="₱" />
+                <SmartInput label="Degradation" value={inputs.degradation} onChange={v => updateField('degradation', v)} unit="%" step="0.001" />
                 <SmartInput label="Fuel Cost" value={inputs.fuel_cost_per_liter} onChange={v => updateField('fuel_cost_per_liter', v)} unit="$" />
                 <SmartInput label="Efficiency" value={inputs.fuel_efficiency} onChange={v => updateField('fuel_efficiency', v)} unit="kWh/L" />
+                <SmartInput label="Opex per kW" value={inputs.opex_per_kw} onChange={v => updateField('opex_per_kw', v)} unit="₱" />
+                <SmartInput label="Capex per MW" value={inputs.capex_per_mw} onChange={v => updateField('capex_per_mw', v)} unit="₱" />
               </div>
             </div>
 
             {/* Finance Card */}
-            <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
-              <div className="flex items-center gap-2 mb-4">
-                 <span className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">🏦</span>
-                <h3 className="font-bold text-slate-200">Financing Structure</h3>
+            <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-sm p-6 rounded-2xl border border-slate-700/50 shadow-2xl hover:shadow-emerald-500/10 transition-all duration-300 hover:border-slate-600/50">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2.5 bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 rounded-xl border border-emerald-500/30">
+                  <span className="text-xl">🏦</span>
+                </div>
+                <h3 className="font-bold text-lg text-slate-100">Financing Structure</h3>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <SmartInput label="Debt %" value={inputs.debt_share} onChange={v => updateField('debt_share', v)} unit="%" />
                 <SmartInput label="Interest" value={inputs.interest_rate} onChange={v => updateField('interest_rate', v)} unit="%" />
+                <SmartInput label="Loan Term" value={inputs.loan_term} onChange={v => updateField('loan_term', v)} unit="years" />
               </div>
             </div>
 
@@ -211,14 +292,25 @@ function FinancialTable() {
 
           {/* RIGHT: CHART */}
           <div className="lg:col-span-2">
-            <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl h-[450px] relative flex flex-col">
-              <h3 className="text-slate-400 font-bold mb-6 text-sm uppercase tracking-widest">Cash Flow Analysis</h3>
+            <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-sm p-6 rounded-2xl border border-slate-700/50 shadow-2xl h-[500px] sm:h-[600px] relative flex flex-col hover:border-slate-600/50 transition-all duration-300">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-slate-300 font-bold text-sm uppercase tracking-widest">Cash Flow Analysis</h3>
+                {loading && (
+                  <div className="flex items-center gap-2 text-xs text-blue-400">
+                    <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-400 border-t-transparent"></div>
+                    <span className="font-mono">Computing...</span>
+                  </div>
+                )}
+              </div>
               
               {loading && (
-                 <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-2xl">
-                   <div className="flex flex-col items-center gap-3">
-                     <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
-                     <span className="text-xs text-blue-400 font-mono animate-pulse">COMPUTING...</span>
+                 <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center z-10 rounded-2xl">
+                   <div className="flex flex-col items-center gap-4">
+                     <div className="relative">
+                       <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500/30 border-t-blue-500"></div>
+                       <div className="absolute inset-0 animate-spin rounded-full h-12 w-12 border-4 border-transparent border-t-blue-400/50" style={{animationDirection: 'reverse', animationDuration: '1.5s'}}></div>
+                     </div>
+                     <span className="text-sm text-blue-400 font-mono animate-pulse">COMPUTING...</span>
                    </div>
                  </div>
               )}
@@ -228,28 +320,75 @@ function FinancialTable() {
                   <ComposedChart data={data?.annual_data}>
                     <defs>
                       <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.9}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.2}/>
+                      </linearGradient>
+                      <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.9}/>
+                        <stop offset="95%" stopColor="#a855f7" stopOpacity={0.2}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                    <XAxis dataKey="Year" stroke="#64748b" tick={{fontSize: 12}} />
-                    <YAxis yAxisId="left" stroke="#64748b" tick={{fontSize: 12}} tickFormatter={(val) => `${(val/1e6).toFixed(0)}`} />
-                    <Tooltip 
-                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }} 
-                      itemStyle={{ color: '#fff', fontSize: '13px' }}
-                      formatter={(val, name) => {
-                        if (name === "Net Profit" || name === "Revenue" || name === "Cash Flow") {
-                          return [`₱${Number(val).toLocaleString()}`, name];
-                        }
-                        return [`₱${Number(val).toLocaleString()}`, name];
-                      }}
-                      labelStyle={{ color: '#94a3b8', marginBottom: '5px' }}
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} opacity={0.3} />
+                    <XAxis 
+                      dataKey="Year" 
+                      stroke="#64748b" 
+                      tick={{fontSize: 11, fill: '#94a3b8'}} 
+                      axisLine={{stroke: '#475569'}}
                     />
-                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                    <Bar yAxisId="left" dataKey="Revenue" fill="url(#colorRev)" name="Revenue" radius={[4, 4, 0, 0]} maxBarSize={50} />
-                    <Bar yAxisId="left" dataKey="Net_Profit" fill="#f97316" name="Net Profit" radius={[4, 4, 0, 0]} maxBarSize={50} />
-                    <Line yAxisId="left" type="monotone" dataKey="Free_Cash_Flow" stroke="#10b981" strokeWidth={3} dot={{r: 0}} activeDot={{r: 6, fill: '#10b981'}} name="Cash Flow" />
+                    <YAxis 
+                      yAxisId="left" 
+                      stroke="#64748b" 
+                      tick={{fontSize: 11, fill: '#94a3b8'}} 
+                      axisLine={{stroke: '#475569'}}
+                      tickFormatter={(val) => `₱${(val/1e6).toFixed(0)}M`} 
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#0f172a', 
+                        border: '1px solid #334155', 
+                        borderRadius: '12px', 
+                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.2)',
+                        padding: '12px'
+                      }} 
+                      itemStyle={{ color: '#fff', fontSize: '13px', padding: '4px 0' }}
+                      formatter={(val, name) => {
+                        const formatted = `₱${Number(val).toLocaleString('en-US', {maximumFractionDigits: 0})}`;
+                        return [formatted, name];
+                      }}
+                      labelStyle={{ color: '#cbd5e1', marginBottom: '8px', fontSize: '14px', fontWeight: '600' }}
+                      cursor={{fill: 'rgba(59, 130, 246, 0.1)'}}
+                    />
+                    <Legend 
+                      wrapperStyle={{ paddingTop: '20px' }} 
+                      iconType="line"
+                      formatter={(value) => <span style={{color: '#cbd5e1', fontSize: '12px'}}>{value}</span>}
+                    />
+                    <Bar 
+                      yAxisId="left" 
+                      dataKey="Revenue" 
+                      fill="url(#colorRev)" 
+                      name="Revenue" 
+                      radius={[6, 6, 0, 0]} 
+                      maxBarSize={60}
+                    />
+                    <Bar 
+                      yAxisId="left" 
+                      dataKey="Net_Profit" 
+                      fill="url(#colorProfit)" 
+                      name="Net Profit" 
+                      radius={[6, 6, 0, 0]} 
+                      maxBarSize={60}
+                    />
+                    <Line 
+                      yAxisId="left" 
+                      type="monotone" 
+                      dataKey="Free_Cash_Flow" 
+                      stroke="#10b981" 
+                      strokeWidth={3} 
+                      dot={{r: 0}} 
+                      activeDot={{r: 8, fill: '#10b981', stroke: '#fff', strokeWidth: 2}} 
+                      name="Cash Flow"
+                    />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>

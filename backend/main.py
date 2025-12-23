@@ -113,10 +113,10 @@ def run_financial_model(inputs: ModelInputs):
         # Note: Using debt_payment as interest payment (includes principal + interest)
         annual_net_profit = revenue - total_opex - tax - current_debt_payment
         
-        # Calculate ROE (Net Profit / Equity)
+        # Calculate ROE (Net Profit / Equity) * 100 for percentage
         # Equity = Capex * (1 - Debt_Share)
         equity = capex_total_php * (1 - inputs.debt_ratio)
-        annual_roe = (annual_net_profit / equity) if equity > 0 else 0.0
+        annual_roe = ((annual_net_profit / equity) * 100) if equity > 0 else 0.0
         
         # Accumulate total net profit for global ROI
         total_net_profit += annual_net_profit
@@ -147,7 +147,7 @@ def run_financial_model(inputs: ModelInputs):
             "Tax": round(tax, 2),
             "Debt_Payment": round(current_debt_payment, 2),
             "Net_Profit": round(annual_net_profit, 2),
-            "ROE": round(annual_roe, 4),
+            "ROE": round(annual_roe, 2),
             "Free_Cash_Flow": round(free_cash_flow, 2),
             "DSCR": round(dscr, 2)
         })
@@ -170,19 +170,19 @@ def run_financial_model(inputs: ModelInputs):
     active_dscr_years = [dscr for dscr in dscr_values if dscr < 100.0]
     avg_dscr = sum(active_dscr_years) / len(active_dscr_years) if active_dscr_years else 100.0
     
-    # Average ROE
+    # Average ROE (already in percentage from annual calculation)
     avg_roe = sum(roe_values) / len(roe_values) if roe_values else 0.0
     
-    # Global ROI (Total Net Profit / Total Capex)
-    global_roi = (total_net_profit / capex_total_php) if capex_total_php > 0 else 0.0
+    # Global ROI (Total Net Profit / Total Capex) * 100 for percentage
+    global_roi = ((total_net_profit / capex_total_php) * 100) if capex_total_php > 0 else 0.0
     
     # Summary metrics
     summary_metrics = {
         "NPV": round(npv, 2),
         "IRR": round(irr, 4) if irr != 0.0 else 0.0,
         "Avg_DSCR": round(avg_dscr, 2),
-        "Avg_ROE": round(avg_roe, 4),
-        "ROI": round(global_roi, 4)
+        "Avg_ROE": round(avg_roe, 2),
+        "ROI": round(global_roi, 2)
     }
     
     return {
