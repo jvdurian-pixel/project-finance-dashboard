@@ -18,6 +18,19 @@ const cleanNumber = (str) => {
   return str.toString().replace(/,/g, '');
 };
 
+// Strip non-numeric characters but keep one decimal point
+const sanitizeNumericInput = (str) => {
+  if (!str) return '';
+  // Remove all non-numeric characters except one decimal point
+  let cleaned = str.toString().replace(/[^\d.]/g, '');
+  // Keep only the first decimal point
+  const parts = cleaned.split('.');
+  if (parts.length > 2) {
+    cleaned = parts[0] + '.' + parts.slice(1).join('');
+  }
+  return cleaned;
+};
+
 // --- COMPONENT: Glitch-Free Input ---
 const SmartInput = ({ label, value, onChange, unit, step = "0.01", useAccountingFormat = false }) => {
   const [localValue, setLocalValue] = useState(value);
@@ -26,17 +39,21 @@ const SmartInput = ({ label, value, onChange, unit, step = "0.01", useAccounting
   useEffect(() => {
     if (useAccountingFormat && !isFocused) {
       setLocalValue(formatNumber(value));
-    } else {
+    } else if (!useAccountingFormat) {
       setLocalValue(value);
     }
+    // When focused with accounting format, keep the current localValue (don't reformat)
   }, [value, useAccountingFormat, isFocused]);
 
   const handleChange = (e) => {
     const rawVal = e.target.value;
     setLocalValue(rawVal);
-    // For accounting format, allow typing but don't format until blur
+    // Allow free typing - don't interfere with user input
+    // Store the raw value, we'll clean it on blur
     if (useAccountingFormat) {
-      onChange(cleanNumber(rawVal));
+      // Store the cleaned numeric value for calculations
+      const cleaned = sanitizeNumericInput(rawVal);
+      onChange(cleaned === '' ? 0 : parseFloat(cleaned) || 0);
     } else {
       onChange(rawVal);
     }
@@ -45,14 +62,28 @@ const SmartInput = ({ label, value, onChange, unit, step = "0.01", useAccounting
   const handleBlur = () => {
     setIsFocused(false);
     if (useAccountingFormat) {
-      const cleaned = cleanNumber(localValue);
-      if (cleaned === '' || isNaN(cleaned)) {
+      // Strip non-numeric characters (keep one decimal point)
+      const sanitized = sanitizeNumericInput(localValue);
+      if (sanitized === '' || sanitized === '.') {
+        // If empty or just a decimal point, revert to formatted value
         setLocalValue(value ? formatNumber(value) : '');
-      } else {
-        const numValue = parseFloat(cleaned);
-        setLocalValue(formatNumber(numValue));
-        onChange(numValue);
+        return;
       }
+      // Convert to Float
+      const numValue = parseFloat(sanitized);
+      if (isNaN(numValue)) {
+        // Invalid number, revert to formatted value
+        setLocalValue(value ? formatNumber(value) : '');
+        return;
+      }
+      // Re-format with toLocaleString
+      const formatted = numValue.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+      setLocalValue(formatted);
+      // Update parent with numeric value
+      onChange(numValue);
     } else {
       if (localValue === '' || isNaN(localValue)) {
         setLocalValue(value);
@@ -64,10 +95,7 @@ const SmartInput = ({ label, value, onChange, unit, step = "0.01", useAccounting
 
   const handleFocus = () => {
     setIsFocused(true);
-    if (useAccountingFormat) {
-      // Remove formatting for easy editing
-      setLocalValue(cleanNumber(localValue));
-    }
+    // Do NOT remove commas - keep the formatted value visible while editing
   };
 
   return (
@@ -122,7 +150,9 @@ function App() {
     const handler = setTimeout(() => {
       const cleanInputs = {};
       Object.keys(inputs).forEach(key => {
-        cleanInputs[key] = parseFloat(inputs[key]) || 0;
+        // Strip commas before parsing (safety net for accounting format fields)
+        const cleaned = inputs[key]?.toString().replace(/,/g, '') || '0';
+        cleanInputs[key] = parseFloat(cleaned) || 0;
       });
       setDebouncedInputs(cleanInputs);
     }, 800);
@@ -134,7 +164,8 @@ function App() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Strip commas from all values before sending
+      // CRITICAL: Strip commas from all values before sending to backend
+      // This ensures accounting format fields (with commas) are converted to raw numbers
       const cleanValue = (val) => {
         if (val == null) return 0;
         const cleaned = val.toString().replace(/,/g, '');
@@ -142,11 +173,13 @@ function App() {
       };
 
       const body = {
+        // Accounting format fields - explicitly strip commas
         hard_costs: cleanValue(debouncedInputs.hardCosts),
         soft_costs: cleanValue(debouncedInputs.softCosts),
-        annual_production_mwh: cleanValue(debouncedInputs.production),
         annual_revenue: cleanValue(debouncedInputs.annualRevenue),
         annual_opex: cleanValue(debouncedInputs.annualOpex),
+        // Other fields
+        annual_production_mwh: cleanValue(debouncedInputs.production),
         tax_rate: cleanValue(debouncedInputs.taxRate),
         interest_rate: cleanValue(debouncedInputs.interestRate),
         debt_share: cleanValue(debouncedInputs.debtShare),
