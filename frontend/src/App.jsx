@@ -164,39 +164,50 @@ function App() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // CRITICAL: Strip commas from all values before sending to backend
-      // This ensures accounting format fields (with commas) are converted to raw numbers
-      const cleanValue = (val) => {
-        if (val == null) return 0;
-        const cleaned = val.toString().replace(/,/g, '');
-        return parseFloat(cleaned) || 0;
-      };
+      // Extract values from debounced inputs
+      const hardCosts = debouncedInputs.hardCosts || 0;
+      const softCosts = debouncedInputs.softCosts || 0;
+      const production = debouncedInputs.production || 0;
+      const tariff = debouncedInputs.tariff || 0;
+      const opex = debouncedInputs.annualOpex || 0;
+      const taxRate = debouncedInputs.taxRate || 0;
+      const interest = debouncedInputs.interestRate || 0;
+      const debtShare = debouncedInputs.debtShare || 0;
+      const years = debouncedInputs.projectDuration || 25;
 
+      // Construct body with explicit field mapping matching backend Pydantic model
       const body = {
-        // Accounting format fields - explicitly strip commas
-        hard_costs: cleanValue(debouncedInputs.hardCosts),
-        soft_costs: cleanValue(debouncedInputs.softCosts),
-        annual_opex: cleanValue(debouncedInputs.annualOpex),
-        // Other fields
-        annual_production_mwh: cleanValue(debouncedInputs.production),
-        tariff_php_per_kwh: cleanValue(debouncedInputs.tariff),
-        tax_rate: cleanValue(debouncedInputs.taxRate),
-        interest_rate: cleanValue(debouncedInputs.interestRate),
-        debt_share: cleanValue(debouncedInputs.debtShare),
-        project_duration_years: parseInt(cleanValue(debouncedInputs.projectDuration)) || 25
+        hard_costs: parseFloat(hardCosts.toString().replace(/,/g, '')) || 0,
+        soft_costs: parseFloat(softCosts.toString().replace(/,/g, '')) || 0,
+        annual_production_mwh: parseFloat(production.toString().replace(/,/g, '')) || 0,
+        tariff_php_per_kwh: parseFloat(tariff.toString().replace(/,/g, '')) || 0, // CRITICAL MATCH
+        annual_opex: parseFloat(opex.toString().replace(/,/g, '')) || 0,
+        tax_rate: parseFloat(taxRate) || 0,
+        interest_rate: parseFloat(interest) || 0,
+        debt_share: parseFloat(debtShare) || 0,
+        project_duration_years: parseInt(parseFloat(years)) || 25
       };
 
-      console.log('Sending payload:', body);
+      console.log('Sending Body:', body);
 
       const response = await fetch('https://project-finance-dashboard.onrender.com/calculate-model', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('API Error:', response.status, errorText);
+        throw new Error(`API Error: ${response.status} - ${errorText}`);
+      }
+
       const result = await response.json();
+      console.log('Received Result:', result);
       setData(result);
     } catch (error) {
       console.error("Fetch error:", error);
+      setData(null);
     }
     setLoading(false);
   }, [debouncedInputs]);
