@@ -133,7 +133,8 @@ function App() {
     hardCosts: 1000000,
     softCosts: 500000,
     capacitySolar: 10,
-    capacityWind: 0,
+    capacityHydro: 0,
+    capacityDiesel: 0,
     capacityBess: 5,
     tariff: 5.25,
     annualOpex: 2000000,
@@ -170,7 +171,8 @@ function App() {
       const hardCosts = debouncedInputs.hardCosts || 0;
       const softCosts = debouncedInputs.softCosts || 0;
       const capacitySolar = debouncedInputs.capacitySolar || 0;
-      const capacityWind = debouncedInputs.capacityWind || 0;
+      const capacityHydro = debouncedInputs.capacityHydro || 0;
+      const capacityDiesel = debouncedInputs.capacityDiesel || 0;
       const capacityBess = debouncedInputs.capacityBess || 0;
       const tariff = debouncedInputs.tariff || 0;
       const opex = debouncedInputs.annualOpex || 0;
@@ -184,7 +186,8 @@ function App() {
         hard_costs: parseFloat(hardCosts.toString().replace(/,/g, '')) || 0,
         soft_costs: parseFloat(softCosts.toString().replace(/,/g, '')) || 0,
         capacity_solar_mw: parseFloat(capacitySolar.toString().replace(/,/g, '')) || 0,
-        capacity_wind_mw: parseFloat(capacityWind.toString().replace(/,/g, '')) || 0,
+        capacity_hydro_mw: parseFloat(capacityHydro.toString().replace(/,/g, '')) || 0,
+        capacity_diesel_mw: parseFloat(capacityDiesel.toString().replace(/,/g, '')) || 0,
         capacity_bess_mwh: parseFloat(capacityBess.toString().replace(/,/g, '')) || 0,
         tariff_php_per_kwh: parseFloat(tariff.toString().replace(/,/g, '')) || 0,
         annual_opex: parseFloat(opex.toString().replace(/,/g, '')) || 0,
@@ -257,9 +260,16 @@ function App() {
                 step="0.01"
               />
               <SmartInput 
-                label="Wind Capacity (MW)" 
-                value={inputs.capacityWind} 
-                onChange={v => updateField('capacityWind', v)} 
+                label="Hydro Capacity (MW)" 
+                value={inputs.capacityHydro} 
+                onChange={v => updateField('capacityHydro', v)} 
+                unit="MW" 
+                step="0.01"
+              />
+              <SmartInput 
+                label="Diesel Capacity (MW)" 
+                value={inputs.capacityDiesel} 
+                onChange={v => updateField('capacityDiesel', v)} 
                 unit="MW" 
                 step="0.01"
               />

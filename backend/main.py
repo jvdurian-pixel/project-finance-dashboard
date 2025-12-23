@@ -18,7 +18,8 @@ class ProjectInputs(BaseModel):
     hard_costs: float
     soft_costs: float
     capacity_solar_mw: float = 0.0
-    capacity_wind_mw: float = 0.0
+    capacity_hydro_mw: float = 0.0  # Baseload
+    capacity_diesel_mw: float = 0.0  # Peaking
     capacity_bess_mwh: float = 0.0
     tariff_php_per_kwh: float
     annual_opex: float
@@ -31,15 +32,25 @@ class ProjectInputs(BaseModel):
 @app.post("/calculate-model")
 def run_financial_model(inputs: ProjectInputs):
     # Constants (physics & financial assumptions)
-    solar_yield = 1450  # kWh/kWp/year
-    wind_yield = 2900   # kWh/kW/year
+    solar_yield = 1450  # kWh/kWp/year (~16.5% CF)
+    # Hydro: 60% CF → 8760 * 0.60 kWh/kW/year
+    hydro_cf = 0.60
+    # Diesel: 15% CF → 8760 * 0.15 kWh/kW/year
+    diesel_cf = 0.15
     degradation_rate = 0.005  # 0.5% per year
     opex_inflation = 0.03     # 3% per year
 
     # Year 1 production (MWh)
-    yr1_production_solar = inputs.capacity_solar_mw * 1000 * (solar_yield / 1000)
-    yr1_production_wind = inputs.capacity_wind_mw * 1000 * (wind_yield / 1000)
-    total_yr1_production_mwh = yr1_production_solar + yr1_production_wind
+    solar_gen = inputs.capacity_solar_mw * 1450  # kWh/kWp/year, MW*1450 gives MWh/year
+    hydro_gen = inputs.capacity_hydro_mw * 8760 * hydro_cf  # kWh/year
+    diesel_gen = inputs.capacity_diesel_mw * 8760 * diesel_cf  # kWh/year
+
+    # Convert hydro & diesel kWh to MWh
+    yr1_production_solar = solar_gen  # already in MWh/year
+    yr1_production_hydro = hydro_gen / 1000.0
+    yr1_production_diesel = diesel_gen / 1000.0
+
+    total_yr1_production_mwh = yr1_production_solar + yr1_production_hydro + yr1_production_diesel
 
     # Total CAPEX and equity
     total_capex = inputs.hard_costs + inputs.soft_costs
@@ -103,7 +114,8 @@ def run_financial_model(inputs: ProjectInputs):
         "hard_costs": round(inputs.hard_costs, 2),
         "soft_costs": round(inputs.soft_costs, 2),
         "capacity_solar_mw": round(inputs.capacity_solar_mw, 3),
-        "capacity_wind_mw": round(inputs.capacity_wind_mw, 3),
+        "capacity_hydro_mw": round(inputs.capacity_hydro_mw, 3),
+        "capacity_diesel_mw": round(inputs.capacity_diesel_mw, 3),
         "capacity_bess_mwh": round(inputs.capacity_bess_mwh, 3),
         "tariff_php_per_kwh": round(inputs.tariff_php_per_kwh, 4),
         "annual_opex": round(inputs.annual_opex, 2),
@@ -116,7 +128,8 @@ def run_financial_model(inputs: ProjectInputs):
         "annual_revenue": round(annual_revenue_year1, 2),
         "annual_net_profit": round(annual_net_profit_year1, 2),
         "generated_solar_mwh": round(yr1_production_solar, 2),
-        "generated_wind_mwh": round(yr1_production_wind, 2),
+        "generated_hydro_mwh": round(yr1_production_hydro, 2),
+        "generated_diesel_mwh": round(yr1_production_diesel, 2),
         "total_production_mwh": round(total_yr1_production_mwh, 2),
         "LCOE_kwh": round(lcoe / 1000, 4) if lifetime_production_mwh > 0 else 0.0,  # convert to per kWh
         "LCOE": round(lcoe, 2),  # retain per MWh if needed
