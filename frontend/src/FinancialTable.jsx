@@ -34,10 +34,11 @@ function FinancialTable({ data, loading }) {
 
   // Format values with proper handling
   const lcoe = data?.LCOE_kwh != null ? `₱${data.LCOE_kwh.toFixed(2)}/kWh` : '-';
-  const roi = data?.ROI_years != null ? (data.ROI_years >= 999 ? 'N/A' : `${data.ROI_years.toFixed(2)} Years`) : '-';
-  const roe = data?.ROE_years != null ? (data.ROE_years >= 999 ? 'N/A' : `${data.ROE_years.toFixed(2)} Years`) : '-';
+  const payback = data?.ROI_years != null ? (data.ROI_years >= 999 ? 'N/A' : `${data.ROI_years.toFixed(2)} Years`) : '-';
+  const equityPayback = data?.ROE_years != null ? (data.ROE_years >= 999 ? 'N/A' : `${data.ROE_years.toFixed(2)} Years`) : '-';
   const totalCapex = data?.total_capex != null ? formatMoney(data.total_capex) : '-';
   const netProfit = data?.annual_net_profit != null ? formatMoney(data.annual_net_profit) : '-';
+  const annualGen = data?.total_production_mwh != null ? `${data.total_production_mwh.toFixed(2)} MWh` : '-';
 
   // Color logic
   const isGoodROI = data?.ROI_years != null && data.ROI_years < 999 && data.ROI_years < 10; // Good if payback < 10 years
@@ -63,18 +64,18 @@ function FinancialTable({ data, loading }) {
           color={isGoodLCOE ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"} 
         />
         <StatCard 
-          label="Project Payback" 
-          value={roi} 
+          label="Payback (Years)" 
+          value={payback} 
           color={isGoodROI ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"} 
         />
         <StatCard 
           label="Equity Payback" 
-          value={roe} 
+          value={equityPayback} 
           color={isGoodROE ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"} 
         />
         <StatCard 
-          label="Net Profit" 
-          value={netProfit} 
+          label="Annual Gen (MWh)" 
+          value={annualGen} 
         />
       </div>
 
@@ -162,11 +163,15 @@ function FinancialTable({ data, loading }) {
                 </tr>
                 <tr className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
                   <td className="py-3 px-4 text-gray-600 dark:text-white">Project Payback</td>
-                  <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{roi}</td>
+                  <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{payback}</td>
                 </tr>
                 <tr className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
                   <td className="py-3 px-4 text-gray-600 dark:text-white">Equity Payback</td>
-                  <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{roe}</td>
+                  <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{equityPayback}</td>
+                </tr>
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <td className="py-3 px-4 text-gray-600 dark:text-white">Annual Gen (MWh)</td>
+                  <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{annualGen}</td>
                 </tr>
                 <tr className="bg-white dark:bg-gray-800">
                   <td className="py-3 px-4 text-gray-600 dark:text-white">LCOE (₱/kWh)</td>

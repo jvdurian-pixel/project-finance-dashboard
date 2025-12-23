@@ -132,7 +132,9 @@ function App() {
   const [inputs, setInputs] = useState({
     hardCosts: 1000000,
     softCosts: 500000,
-    production: 1000,
+    capacitySolar: 10,
+    capacityWind: 0,
+    capacityBess: 5,
     tariff: 5.25,
     annualOpex: 2000000,
     taxRate: 0.25,
@@ -167,7 +169,9 @@ function App() {
       // Extract values from debounced inputs
       const hardCosts = debouncedInputs.hardCosts || 0;
       const softCosts = debouncedInputs.softCosts || 0;
-      const production = debouncedInputs.production || 0;
+      const capacitySolar = debouncedInputs.capacitySolar || 0;
+      const capacityWind = debouncedInputs.capacityWind || 0;
+      const capacityBess = debouncedInputs.capacityBess || 0;
       const tariff = debouncedInputs.tariff || 0;
       const opex = debouncedInputs.annualOpex || 0;
       const taxRate = debouncedInputs.taxRate || 0;
@@ -179,8 +183,10 @@ function App() {
       const body = {
         hard_costs: parseFloat(hardCosts.toString().replace(/,/g, '')) || 0,
         soft_costs: parseFloat(softCosts.toString().replace(/,/g, '')) || 0,
-        annual_production_mwh: parseFloat(production.toString().replace(/,/g, '')) || 0,
-        tariff_php_per_kwh: parseFloat(tariff.toString().replace(/,/g, '')) || 0, // CRITICAL MATCH
+        capacity_solar_mw: parseFloat(capacitySolar.toString().replace(/,/g, '')) || 0,
+        capacity_wind_mw: parseFloat(capacityWind.toString().replace(/,/g, '')) || 0,
+        capacity_bess_mwh: parseFloat(capacityBess.toString().replace(/,/g, '')) || 0,
+        tariff_php_per_kwh: parseFloat(tariff.toString().replace(/,/g, '')) || 0,
         annual_opex: parseFloat(opex.toString().replace(/,/g, '')) || 0,
         tax_rate: parseFloat(taxRate) || 0,
         interest_rate: parseFloat(interest) || 0,
@@ -244,10 +250,25 @@ function App() {
                 useAccountingFormat={true}
               />
               <SmartInput 
-                label="Production (MWh)" 
-                value={inputs.production} 
-                onChange={v => updateField('production', v)} 
+                label="Solar Capacity (MW)" 
+                value={inputs.capacitySolar} 
+                onChange={v => updateField('capacitySolar', v)} 
+                unit="MW" 
+                step="0.01"
+              />
+              <SmartInput 
+                label="Wind Capacity (MW)" 
+                value={inputs.capacityWind} 
+                onChange={v => updateField('capacityWind', v)} 
+                unit="MW" 
+                step="0.01"
+              />
+              <SmartInput 
+                label="BESS Capacity (MWh)" 
+                value={inputs.capacityBess} 
+                onChange={v => updateField('capacityBess', v)} 
                 unit="MWh" 
+                step="0.01"
               />
               <SmartInput 
                 label="Tariff (₱/kWh)" 
