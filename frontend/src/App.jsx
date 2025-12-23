@@ -2,32 +2,72 @@ import React, { useState, useEffect, useCallback } from 'react';
 import FinancialTable from './FinancialTable';
 import './App.css';
 
+// --- HELPERS: Accounting Formatting ---
+const formatNumber = (num) => {
+  if (num == null || num === '' || isNaN(num)) return '';
+  const numValue = typeof num === 'string' ? parseFloat(num.replace(/,/g, '')) : num;
+  if (isNaN(numValue)) return '';
+  return numValue.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
+};
+
+const cleanNumber = (str) => {
+  if (!str) return '';
+  return str.toString().replace(/,/g, '');
+};
+
 // --- COMPONENT: Glitch-Free Input ---
-const SmartInput = ({ label, value, onChange, unit, step = "0.01" }) => {
+const SmartInput = ({ label, value, onChange, unit, step = "0.01", useAccountingFormat = false }) => {
   const [localValue, setLocalValue] = useState(value);
   const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
-    setLocalValue(value);
-  }, [value]);
+    if (useAccountingFormat && !isFocused) {
+      setLocalValue(formatNumber(value));
+    } else {
+      setLocalValue(value);
+    }
+  }, [value, useAccountingFormat, isFocused]);
 
   const handleChange = (e) => {
     const rawVal = e.target.value;
     setLocalValue(rawVal);
-    onChange(rawVal);
+    // For accounting format, allow typing but don't format until blur
+    if (useAccountingFormat) {
+      onChange(cleanNumber(rawVal));
+    } else {
+      onChange(rawVal);
+    }
   };
 
   const handleBlur = () => {
     setIsFocused(false);
-    if (localValue === '' || isNaN(localValue)) {
-      setLocalValue(value);
+    if (useAccountingFormat) {
+      const cleaned = cleanNumber(localValue);
+      if (cleaned === '' || isNaN(cleaned)) {
+        setLocalValue(value ? formatNumber(value) : '');
+      } else {
+        const numValue = parseFloat(cleaned);
+        setLocalValue(formatNumber(numValue));
+        onChange(numValue);
+      }
     } else {
-      onChange(parseFloat(localValue));
+      if (localValue === '' || isNaN(localValue)) {
+        setLocalValue(value);
+      } else {
+        onChange(parseFloat(localValue));
+      }
     }
   };
 
   const handleFocus = () => {
     setIsFocused(true);
+    if (useAccountingFormat) {
+      // Remove formatting for easy editing
+      setLocalValue(cleanNumber(localValue));
+    }
   };
 
   return (
@@ -35,14 +75,14 @@ const SmartInput = ({ label, value, onChange, unit, step = "0.01" }) => {
       <label className="text-xs text-gray-600 dark:text-gray-300 font-medium">{label}</label>
       <div className="relative">
         <input
-          type="number"
+          type={useAccountingFormat ? "text" : "number"}
           step={step}
           value={localValue}
           onChange={handleChange}
           onBlur={handleBlur}
           onFocus={handleFocus}
           inputMode="decimal"
-          className={`w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2.5 pr-8 text-sm text-right text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500
+          className={`w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2.5 pr-8 text-sm font-mono text-right text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500
                      transition-all duration-200
                      ${isFocused 
                        ? 'border-blue-500 ring-2 ring-blue-200 dark:ring-blue-800' 
@@ -94,16 +134,23 @@ function App() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      // Strip commas from all values before sending
+      const cleanValue = (val) => {
+        if (val == null) return 0;
+        const cleaned = val.toString().replace(/,/g, '');
+        return parseFloat(cleaned) || 0;
+      };
+
       const body = {
-        hard_costs: parseFloat(debouncedInputs.hardCosts) || 0,
-        soft_costs: parseFloat(debouncedInputs.softCosts) || 0,
-        annual_production_mwh: parseFloat(debouncedInputs.production) || 0,
-        annual_revenue: parseFloat(debouncedInputs.annualRevenue) || 0,
-        annual_opex: parseFloat(debouncedInputs.annualOpex) || 0,
-        tax_rate: parseFloat(debouncedInputs.taxRate) || 0,
-        interest_rate: parseFloat(debouncedInputs.interestRate) || 0,
-        debt_share: parseFloat(debouncedInputs.debtShare) || 0,
-        project_duration_years: parseInt(debouncedInputs.projectDuration) || 25
+        hard_costs: cleanValue(debouncedInputs.hardCosts),
+        soft_costs: cleanValue(debouncedInputs.softCosts),
+        annual_production_mwh: cleanValue(debouncedInputs.production),
+        annual_revenue: cleanValue(debouncedInputs.annualRevenue),
+        annual_opex: cleanValue(debouncedInputs.annualOpex),
+        tax_rate: cleanValue(debouncedInputs.taxRate),
+        interest_rate: cleanValue(debouncedInputs.interestRate),
+        debt_share: cleanValue(debouncedInputs.debtShare),
+        project_duration_years: parseInt(cleanValue(debouncedInputs.projectDuration)) || 25
       };
 
       console.log('Sending payload:', body);
@@ -142,13 +189,15 @@ function App() {
                 label="Hard Costs (₱)" 
                 value={inputs.hardCosts} 
                 onChange={v => updateField('hardCosts', v)} 
-                unit="₱" 
+                unit="₱"
+                useAccountingFormat={true}
               />
               <SmartInput 
                 label="Soft Costs (₱)" 
                 value={inputs.softCosts} 
                 onChange={v => updateField('softCosts', v)} 
-                unit="₱" 
+                unit="₱"
+                useAccountingFormat={true}
               />
               <SmartInput 
                 label="Production (MWh)" 
@@ -160,34 +209,36 @@ function App() {
                 label="Revenue (₱)" 
                 value={inputs.annualRevenue} 
                 onChange={v => updateField('annualRevenue', v)} 
-                unit="₱" 
+                unit="₱"
+                useAccountingFormat={true}
               />
               <SmartInput 
                 label="Opex (₱)" 
                 value={inputs.annualOpex} 
                 onChange={v => updateField('annualOpex', v)} 
-                unit="₱" 
+                unit="₱"
+                useAccountingFormat={true}
               />
               <SmartInput 
                 label="Tax Rate (%)" 
                 value={inputs.taxRate} 
                 onChange={v => updateField('taxRate', v)} 
                 unit="%" 
-                step="0.001" 
+                step="0.0001" 
               />
               <SmartInput 
                 label="Interest (%)" 
                 value={inputs.interestRate} 
                 onChange={v => updateField('interestRate', v)} 
                 unit="%" 
-                step="0.001" 
+                step="0.0001" 
               />
               <SmartInput 
                 label="Debt Share (%)" 
                 value={inputs.debtShare} 
                 onChange={v => updateField('debtShare', v)} 
                 unit="%" 
-                step="0.01" 
+                step="0.0001" 
               />
               <SmartInput 
                 label="Years" 
