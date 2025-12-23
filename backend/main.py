@@ -73,6 +73,8 @@ def run_financial_model(inputs: ModelInputs):
     annual_data = []
     free_cash_flows = [-capex_total_php]  # Year 0: initial investment
     dscr_values = []
+    roe_values = []
+    total_net_profit = 0.0
     
     # Calculation loop for 30 years
     for year in range(1, project_years + 1):
@@ -107,6 +109,18 @@ def run_financial_model(inputs: ModelInputs):
         # Debt Service (only during tenor period)
         current_debt_payment = debt_payment if year <= inputs.tenor_years else 0.0
         
+        # Calculate Net Profit (Revenue - Opex - Tax - Interest Payment)
+        # Note: Using debt_payment as interest payment (includes principal + interest)
+        annual_net_profit = revenue - total_opex - tax - current_debt_payment
+        
+        # Calculate ROE (Net Profit / Equity)
+        # Equity = Capex * (1 - Debt_Share)
+        equity = capex_total_php * (1 - inputs.debt_ratio)
+        annual_roe = (annual_net_profit / equity) if equity > 0 else 0.0
+        
+        # Accumulate total net profit for global ROI
+        total_net_profit += annual_net_profit
+        
         # Free Cash Flow
         free_cash_flow = ebitda - tax - current_debt_payment
         
@@ -117,6 +131,7 @@ def run_financial_model(inputs: ModelInputs):
             dscr = 100.0  # Safe Infinity
         
         dscr_values.append(dscr)
+        roe_values.append(annual_roe)
         free_cash_flows.append(free_cash_flow)
         
         # Store annual data
@@ -131,6 +146,8 @@ def run_financial_model(inputs: ModelInputs):
             "EBITDA": round(ebitda, 2),
             "Tax": round(tax, 2),
             "Debt_Payment": round(current_debt_payment, 2),
+            "Net_Profit": round(annual_net_profit, 2),
+            "ROE": round(annual_roe, 4),
             "Free_Cash_Flow": round(free_cash_flow, 2),
             "DSCR": round(dscr, 2)
         })
@@ -153,11 +170,19 @@ def run_financial_model(inputs: ModelInputs):
     active_dscr_years = [dscr for dscr in dscr_values if dscr < 100.0]
     avg_dscr = sum(active_dscr_years) / len(active_dscr_years) if active_dscr_years else 100.0
     
+    # Average ROE
+    avg_roe = sum(roe_values) / len(roe_values) if roe_values else 0.0
+    
+    # Global ROI (Total Net Profit / Total Capex)
+    global_roi = (total_net_profit / capex_total_php) if capex_total_php > 0 else 0.0
+    
     # Summary metrics
     summary_metrics = {
         "NPV": round(npv, 2),
         "IRR": round(irr, 4) if irr != 0.0 else 0.0,
-        "Avg_DSCR": round(avg_dscr, 2)
+        "Avg_DSCR": round(avg_dscr, 2),
+        "Avg_ROE": round(avg_roe, 4),
+        "ROI": round(global_roi, 4)
     }
     
     return {

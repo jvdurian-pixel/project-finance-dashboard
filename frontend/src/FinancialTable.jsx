@@ -132,11 +132,15 @@ function FinancialTable() {
 
   const metrics = data?.summary_metrics || {};
   const irr = metrics.IRR != null ? (metrics.IRR * 100).toFixed(2) + "%" : "-";
-  const dscr = metrics.Min_DSCR != null ? metrics.Min_DSCR.toFixed(2) + "x" : "-";
+  const dscr = metrics.Avg_DSCR != null ? metrics.Avg_DSCR.toFixed(2) + "x" : "-";
+  const roi = metrics.ROI != null ? (metrics.ROI * 100).toFixed(2) + "%" : "-";
+  const avgRoe = metrics.Avg_ROE != null ? (metrics.Avg_ROE * 100).toFixed(2) + "%" : "-";
   
   // Logic: Green if IRR > 12% and DSCR > 1.15
   const isProfitable = metrics.IRR > 0.12; 
-  const isBankable = metrics.Min_DSCR > 1.15;
+  const isBankable = metrics.Avg_DSCR > 1.15;
+  const isGoodROI = metrics.ROI > 0.15; // 15% ROI threshold
+  const isGoodROE = metrics.Avg_ROE > 0.12; // 12% ROE threshold
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-white overflow-hidden font-sans">
@@ -151,7 +155,9 @@ function FinancialTable() {
           
           <div className="flex space-x-3 w-full sm:w-auto justify-end">
             <StatCard label="IRR" value={irr} color={isProfitable ? "text-emerald-400" : "text-rose-400"} isGood={isProfitable} />
-            <StatCard label="Min DSCR" value={dscr} color={isBankable ? "text-emerald-400" : "text-amber-400"} isGood={isBankable} />
+            <StatCard label="Avg DSCR" value={dscr} color={isBankable ? "text-emerald-400" : "text-amber-400"} isGood={isBankable} />
+            <StatCard label="ROI" value={roi} color={isGoodROI ? "text-emerald-400" : "text-amber-400"} isGood={isGoodROI} />
+            <StatCard label="Avg ROE" value={avgRoe} color={isGoodROE ? "text-emerald-400" : "text-amber-400"} isGood={isGoodROE} />
           </div>
         </div>
       </div>
@@ -232,12 +238,18 @@ function FinancialTable() {
                     <Tooltip 
                       contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }} 
                       itemStyle={{ color: '#fff', fontSize: '13px' }}
-                      formatter={(val) => [`₱${Number(val).toLocaleString()}`, ""]}
+                      formatter={(val, name) => {
+                        if (name === "Net Profit" || name === "Revenue" || name === "Cash Flow") {
+                          return [`₱${Number(val).toLocaleString()}`, name];
+                        }
+                        return [`₱${Number(val).toLocaleString()}`, name];
+                      }}
                       labelStyle={{ color: '#94a3b8', marginBottom: '5px' }}
                     />
                     <Legend wrapperStyle={{ paddingTop: '20px' }} />
                     <Bar yAxisId="left" dataKey="Revenue" fill="url(#colorRev)" name="Revenue" radius={[4, 4, 0, 0]} maxBarSize={50} />
-                    <Line yAxisId="left" type="monotone" dataKey="Free Cash Flow" stroke="#10b981" strokeWidth={3} dot={{r: 0}} activeDot={{r: 6, fill: '#10b981'}} name="Cash Flow" />
+                    <Bar yAxisId="left" dataKey="Net_Profit" fill="#f97316" name="Net Profit" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                    <Line yAxisId="left" type="monotone" dataKey="Free_Cash_Flow" stroke="#10b981" strokeWidth={3} dot={{r: 0}} activeDot={{r: 6, fill: '#10b981'}} name="Cash Flow" />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
