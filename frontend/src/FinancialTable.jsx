@@ -1,491 +1,253 @@
-import React, { useState, useEffect } from 'react';
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Download, TrendingUp, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  Line, ComposedChart
+} from 'recharts';
 
-function FinancialTable() {
-  const [data, setData] = useState([]);
-  const [summaryMetrics, setSummaryMetrics] = useState({});
-  const [inputs, setInputs] = useState({
-    // Macro
-    forex_rate: 58.0,
-    forex_escalation: 0.02,
-    local_inflation: 0.04,
-    // Revenue
-    tariff_php: 8.50,
-    generation_kwh: 1000000,
-    degradation_rate: 0.005,
-    // Capex
-    capex_usd: 1500000,
-    capex_forex_exposure: 0.70,
-    // Opex
-    fuel_cost_usd_liter: 0.90,
-    fuel_efficiency: 3.8,
-    variable_opex_php: 1.50,
-    // Debt
-    debt_ratio: 0.70,
-    interest_rate: 0.08,
-    tenor_years: 15,
-    // Tax
-    tax_rate: 0.25
-  });
+// --- COMPONENT: Glitch-Free Input ---
+// This component keeps a local "buffer" so your decimal points don't disappear while typing.
+const SmartInput = ({ label, value, onChange, unit, step = "0.01" }) => {
+  // We use a local state to hold EXACTLY what the user types (even "10.")
+  const [localValue, setLocalValue] = useState(value);
 
-  // Collapsible sections state
-  const [expandedSections, setExpandedSections] = useState({
-    macro: true,
-    tech: true,
-    finance: true
-  });
+  // Sync local value if the parent changes it externally (e.g. loading a preset)
+  useEffect(() => {
+    setLocalValue(value);
+  }, [value]);
 
-  const toggleSection = (section) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }));
+  const handleChange = (e) => {
+    const rawVal = e.target.value;
+    setLocalValue(rawVal); // Update the UI immediately so it feels fast
+    
+    // Only tell the parent if it's a valid number or empty
+    // We don't parseFloat here to avoid losing the trailing "."
+    onChange(rawVal);
   };
 
-  // Fetch data from Python
-  const fetchData = async () => {
-    try {
-      const response = await fetch('http://project-finance-dashboard.onrender.com/calculate-model', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(inputs)
-      });
-      const result = await response.json();
-      if (result.annual_data) {
-        setData(result.annual_data);
-      }
-      if (result.summary_metrics) {
-        setSummaryMetrics(result.summary_metrics);
-      }
-    } catch (error) {
-      console.error("Error fetching:", error);
+  const handleBlur = () => {
+    // When user leaves the field, clean it up
+    if (localValue === '' || isNaN(localValue)) {
+      setLocalValue(value); // Revert to last good value
+    } else {
+      onChange(parseFloat(localValue)); // Lock it in as a number
     }
   };
 
-  // Fetch automatically on load and when inputs change
-  useEffect(() => {
-    fetchData();
-  }, [
-    inputs.forex_rate, inputs.forex_escalation, inputs.local_inflation,
-    inputs.tariff_php, inputs.generation_kwh, inputs.degradation_rate,
-    inputs.capex_usd, inputs.capex_forex_exposure,
-    inputs.fuel_cost_usd_liter, inputs.fuel_efficiency, inputs.variable_opex_php,
-    inputs.debt_ratio, inputs.interest_rate, inputs.tenor_years,
-    inputs.tax_rate
-  ]);
-
-  // CSV Export Function
-  const downloadCSV = () => {
-    if (data.length === 0) return;
-    const headers = Object.keys(data[0]);
-    const csvRows = [
-      headers.join(','),
-      ...data.map(row => headers.map(header => row[header]).join(','))
-    ];
-    const csvString = csvRows.join('\n');
-    const blob = new Blob([csvString], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'financial_model.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  };
-
-  // Calculate Min DSCR from annual data
-  const minDSCR = data.length > 0 
-    ? Math.min(...data.map(row => row.DSCR).filter(dscr => dscr < 100))
-    : 0;
-
-  // Professional dark color palette
-  const colors = {
-    background: '#0f172a',
-    card: '#1e293b',
-    cardBorder: '#334155',
-    text: '#f1f5f9',
-    textMuted: '#cbd5e1',
-    accent: '#10b981',
-    accentDark: '#059669',
-    revenue: '#3b82f6',
-    fcf: '#10b981',
-    warning: '#f59e0b',
-    danger: '#ef4444',
-    header: '#1e293b',
-    rowEven: '#1e293b',
-    rowOdd: '#0f172a'
-  };
-
-  const InputField = ({ label, name, type = 'number', step }) => (
-    <div style={{ marginBottom: '16px' }}>
-      <label style={{
-        display: 'block',
-        marginBottom: '6px',
-        fontSize: '13px',
-        fontWeight: '500',
-        color: colors.textMuted
-      }}>
-        {label}
-      </label>
-      <input
-        type={type}
-        step={step}
-        value={inputs[name]}
-        onChange={(e) => setInputs({...inputs, [name]: type === 'number' ? Number(e.target.value) : e.target.value})}
-        style={{
-          width: '100%',
-          padding: '10px',
-          backgroundColor: colors.background,
-          border: `1px solid ${colors.cardBorder}`,
-          borderRadius: '6px',
-          color: colors.text,
-          fontSize: '14px',
-          outline: 'none'
-        }}
-      />
+  return (
+    <div className="flex flex-col space-y-1">
+      <label className="text-xs text-slate-400 font-semibold uppercase tracking-wider">{label}</label>
+      <div className="relative group">
+        <input
+          type="number"
+          step={step}
+          value={localValue}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          inputMode="decimal" // 📱 Forces the right keyboard on Samsung
+          className="w-full bg-slate-800 text-white border border-slate-700 rounded-lg p-3 pr-8 
+                     focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all
+                     group-hover:border-slate-600 font-mono text-right"
+        />
+        <span className="absolute right-3 top-3 text-slate-500 text-sm font-bold pointer-events-none">{unit}</span>
+      </div>
     </div>
   );
+};
+
+// --- COMPONENT: Sticky Stat Card ---
+const StatCard = ({ label, value, color, isGood }) => (
+  <div className={`flex flex-col p-2 sm:p-3 rounded-lg border ${isGood ? 'bg-emerald-900/20 border-emerald-500/30' : 'bg-rose-900/20 border-rose-500/30'}`}>
+    <span className="text-[10px] sm:text-xs text-slate-400 uppercase">{label}</span>
+    <span className={`text-lg sm:text-xl font-bold ${color}`}>{value}</span>
+  </div>
+);
+
+function FinancialTable() {
+  // --- STATE ---
+  // We store everything as STRINGS or NUMBERS, doesn't matter, backend handles conversion.
+  const [inputs, setInputs] = useState({
+    // Macro
+    inflation_rate: 0.04,
+    forex_rate: 58.0,
+    forex_escalation: 0.02,
+    // Tech
+    capacity_mw: 50,
+    capacity_factor: 0.85,
+    degradation: 0.005,
+    fuel_cost_per_liter: 0.90,
+    fuel_efficiency: 3.8,
+    // Finance
+    tariff: 8.50,
+    opex_per_kw: 15.0,
+    capex_per_mw: 1000000,
+    debt_share: 0.70,
+    interest_rate: 0.08,
+    loan_term: 10
+  });
+
+  const [debouncedInputs, setDebouncedInputs] = useState(inputs);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // --- DEBOUNCE LOGIC ---
+  // Wait 800ms after typing stops before calculating.
+  // This prevents the "stutter" on your phone.
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      // Convert all inputs to actual numbers before sending to "The Brain"
+      const cleanInputs = {};
+      Object.keys(inputs).forEach(key => {
+        cleanInputs[key] = parseFloat(inputs[key]) || 0;
+      });
+      setDebouncedInputs(cleanInputs);
+    }, 800); 
+
+    return () => clearTimeout(handler);
+  }, [inputs]);
+
+  // --- FETCH DATA ---
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('https://project-finance-dashboard.onrender.com/calculate-model', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(debouncedInputs)
+      });
+      const result = await response.json();
+      if (result.annual_data) setData(result);
+    } catch (error) {
+      console.error("Fetch error:", error);
+    }
+    setLoading(false);
+  }, [debouncedInputs]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const updateField = (field, val) => {
+    setInputs(prev => ({ ...prev, [field]: val }));
+  };
+
+  const metrics = data?.summary_metrics || {};
+  const irr = metrics.IRR != null ? (metrics.IRR * 100).toFixed(2) + "%" : "-";
+  const dscr = metrics.Min_DSCR != null ? metrics.Min_DSCR.toFixed(2) + "x" : "-";
+  
+  // Logic: Green if IRR > 12% and DSCR > 1.15
+  const isProfitable = metrics.IRR > 0.12; 
+  const isBankable = metrics.Min_DSCR > 1.15;
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      backgroundColor: colors.background,
-      color: colors.text,
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      padding: '20px'
-    }}>
-      {/* Top Bar */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '20px',
-        paddingBottom: '20px',
-        borderBottom: `2px solid ${colors.cardBorder}`
-      }}>
-        <h1 style={{
-          margin: 0,
-          fontSize: '28px',
-          fontWeight: '700',
-          color: colors.text,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px'
-        }}>
-          <TrendingUp size={32} color={colors.accent} />
-          Infrastructure Financial Modeler
-        </h1>
-        <button
-          onClick={downloadCSV}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 20px',
-            backgroundColor: colors.accent,
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            fontSize: '14px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            transition: 'background-color 0.2s'
-          }}
-          onMouseEnter={(e) => e.target.style.backgroundColor = colors.accentDark}
-          onMouseLeave={(e) => e.target.style.backgroundColor = colors.accent}
-        >
-          <Download size={18} />
-          Download CSV
-        </button>
-      </div>
-
-      {/* Main Grid Layout */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-        gap: '20px',
-        marginBottom: '20px'
-      }}>
-        {/* Card 1: Inputs */}
-        <div style={{
-          backgroundColor: colors.card,
-          border: `1px solid ${colors.cardBorder}`,
-          borderRadius: '12px',
-          padding: '20px',
-          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
-          gridColumn: 'span 1'
-        }}>
-          <h2 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600' }}>Model Inputs</h2>
+    <div className="flex flex-col h-screen bg-slate-950 text-white overflow-hidden font-sans">
+      
+      {/* 1. STICKY HEADER (Glassmorphism) */}
+      <div className="flex-none bg-slate-900/90 backdrop-blur-md border-b border-slate-800 p-3 z-50 sticky top-0">
+        <div className="max-w-6xl mx-auto flex justify-between items-center">
+          <div className="flex items-center space-x-2">
+            <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse"></div>
+            <h1 className="text-sm font-bold text-slate-300 hidden sm:block">InfraModeler</h1>
+          </div>
           
-          {/* Macro Section */}
-          <div style={{ marginBottom: '16px', borderBottom: `1px solid ${colors.cardBorder}`, paddingBottom: '12px' }}>
-            <button
-              onClick={() => toggleSection('macro')}
-              style={{
-                width: '100%',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: 'none',
-                border: 'none',
-                color: colors.text,
-                fontSize: '16px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                padding: '8px 0'
-              }}
-            >
-              <span>Macro (Forex/Inflation)</span>
-              {expandedSections.macro ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-            </button>
-            {expandedSections.macro && (
-              <div style={{ marginTop: '12px' }}>
-                <InputField label="Forex Rate (PHP/USD)" name="forex_rate" step="0.1" />
-                <InputField label="Forex Escalation" name="forex_escalation" step="0.001" />
-                <InputField label="Local Inflation" name="local_inflation" step="0.001" />
-              </div>
-            )}
-          </div>
-
-          {/* Tech Section */}
-          <div style={{ marginBottom: '16px', borderBottom: `1px solid ${colors.cardBorder}`, paddingBottom: '12px' }}>
-            <button
-              onClick={() => toggleSection('tech')}
-              style={{
-                width: '100%',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: 'none',
-                border: 'none',
-                color: colors.text,
-                fontSize: '16px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                padding: '8px 0'
-              }}
-            >
-              <span>Tech (Gen/Fuel)</span>
-              {expandedSections.tech ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-            </button>
-            {expandedSections.tech && (
-              <div style={{ marginTop: '12px' }}>
-                <InputField label="Tariff (PHP/kWh)" name="tariff_php" step="0.01" />
-                <InputField label="Generation (kWh)" name="generation_kwh" step="1000" />
-                <InputField label="Degradation Rate" name="degradation_rate" step="0.001" />
-                <InputField label="Fuel Cost (USD/Liter)" name="fuel_cost_usd_liter" step="0.01" />
-                <InputField label="Fuel Efficiency" name="fuel_efficiency" step="0.1" />
-                <InputField label="Variable OPEX (PHP/kWh)" name="variable_opex_php" step="0.01" />
-              </div>
-            )}
-          </div>
-
-          {/* Finance Section */}
-          <div>
-            <button
-              onClick={() => toggleSection('finance')}
-              style={{
-                width: '100%',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: 'none',
-                border: 'none',
-                color: colors.text,
-                fontSize: '16px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                padding: '8px 0'
-              }}
-            >
-              <span>Finance (Debt/Capex)</span>
-              {expandedSections.finance ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-            </button>
-            {expandedSections.finance && (
-              <div style={{ marginTop: '12px' }}>
-                <InputField label="CAPEX (USD)" name="capex_usd" step="10000" />
-                <InputField label="CAPEX Forex Exposure" name="capex_forex_exposure" step="0.01" />
-                <InputField label="Debt Ratio" name="debt_ratio" step="0.01" />
-                <InputField label="Interest Rate" name="interest_rate" step="0.001" />
-                <InputField label="Tenor (Years)" name="tenor_years" step="1" />
-                <InputField label="Tax Rate" name="tax_rate" step="0.01" />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Card 2: Chart */}
-        <div style={{
-          backgroundColor: colors.card,
-          border: `1px solid ${colors.cardBorder}`,
-          borderRadius: '12px',
-          padding: '20px',
-          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
-          gridColumn: 'span 2'
-        }}>
-          <h2 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600' }}>Revenue & Cash Flow</h2>
-          <ResponsiveContainer width="100%" height={350}>
-            <ComposedChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke={colors.cardBorder} />
-              <XAxis dataKey="Year" stroke={colors.textMuted} style={{ fontSize: '12px' }} />
-              <YAxis 
-                stroke={colors.textMuted}
-                style={{ fontSize: '12px' }}
-                tickFormatter={(value) => `₱${(value / 1000000).toFixed(1)}M`}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: colors.card,
-                  border: `1px solid ${colors.cardBorder}`,
-                  borderRadius: '8px',
-                  color: colors.text
-                }}
-                formatter={(value) => `₱${Math.round(value).toLocaleString()}`}
-              />
-              <Legend wrapperStyle={{ color: colors.text }} />
-              <Bar dataKey="Revenue" fill={colors.revenue} name="Revenue" />
-              <Line 
-                type="monotone" 
-                dataKey="Free_Cash_Flow" 
-                stroke={colors.fcf} 
-                strokeWidth={2}
-                dot={false}
-                name="Free Cash Flow"
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Card 3: KPIs */}
-        <div style={{
-          backgroundColor: colors.card,
-          border: `1px solid ${colors.cardBorder}`,
-          borderRadius: '12px',
-          padding: '20px',
-          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
-          gridColumn: 'span 1'
-        }}>
-          <h2 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600' }}>Key Metrics</h2>
-          
-          {/* NPV */}
-          <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: `1px solid ${colors.cardBorder}` }}>
-            <div style={{ fontSize: '13px', color: colors.textMuted, marginBottom: '6px' }}>NPV</div>
-            <div style={{ fontSize: '24px', fontWeight: '700', color: colors.accent }}>
-              ₱{summaryMetrics.NPV ? (summaryMetrics.NPV / 1000000).toFixed(2) : '0.00'}M
-            </div>
-          </div>
-
-          {/* IRR with risk alert */}
-          <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: `1px solid ${colors.cardBorder}` }}>
-            <div style={{ fontSize: '13px', color: colors.textMuted, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              IRR
-              {summaryMetrics.IRR && summaryMetrics.IRR < 0.10 && (
-                <AlertTriangle size={14} color={colors.warning} />
-              )}
-            </div>
-            <div style={{
-              fontSize: '24px',
-              fontWeight: '700',
-              color: summaryMetrics.IRR && summaryMetrics.IRR < 0.10 ? colors.warning : colors.accent
-            }}>
-              {summaryMetrics.IRR ? (summaryMetrics.IRR * 100).toFixed(2) : '0.00'}%
-            </div>
-          </div>
-
-          {/* Min DSCR with risk alert */}
-          <div>
-            <div style={{ fontSize: '13px', color: colors.textMuted, marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              Min DSCR
-              {minDSCR < 1.20 && minDSCR > 0 && (
-                <AlertTriangle size={14} color={colors.danger} />
-              )}
-            </div>
-            <div style={{
-              fontSize: '24px',
-              fontWeight: '700',
-              color: minDSCR < 1.20 && minDSCR > 0 ? colors.danger : colors.accent
-            }}>
-              {minDSCR > 0 ? minDSCR.toFixed(2) : '0.00'}x
-            </div>
+          <div className="flex space-x-3 w-full sm:w-auto justify-end">
+            <StatCard label="IRR" value={irr} color={isProfitable ? "text-emerald-400" : "text-rose-400"} isGood={isProfitable} />
+            <StatCard label="Min DSCR" value={dscr} color={isBankable ? "text-emerald-400" : "text-amber-400"} isGood={isBankable} />
           </div>
         </div>
       </div>
 
-      {/* Card 4: Table - Full Width */}
-      <div style={{
-        backgroundColor: colors.card,
-        border: `1px solid ${colors.cardBorder}`,
-        borderRadius: '12px',
-        padding: '20px',
-        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)',
-        overflowX: 'auto',
-        gridColumn: '1 / -1'
-      }}>
-        <h2 style={{ margin: '0 0 16px 0', fontSize: '20px', fontWeight: '600' }}>
-          Annual Data ({data.length} Years)
-        </h2>
-        {data.length > 0 ? (
-          <table style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            fontSize: '13px'
-          }}>
-            <thead>
-              <tr style={{ backgroundColor: colors.header }}>
-                {Object.keys(data[0]).map((key) => (
-                  <th key={key} style={{
-                    padding: '10px',
-                    textAlign: key === 'Year' ? 'left' : 'right',
-                    fontWeight: '600',
-                    color: colors.text,
-                    borderBottom: `2px solid ${colors.cardBorder}`
-                  }}>
-                    {key.replace(/_/g, ' ')}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((row, index) => (
-                <tr
-                  key={index}
-                  style={{
-                    backgroundColor: index % 2 === 0 ? colors.rowEven : colors.rowOdd
-                  }}
-                >
-                  {Object.keys(row).map((key) => (
-                    <td
-                      key={key}
-                      style={{
-                        padding: '10px',
-                        textAlign: key === 'Year' ? 'left' : 'right',
-                        color: key === 'DSCR' && row[key] < 1.20 && row[key] < 100 ? colors.danger : colors.text,
-                        fontWeight: key === 'DSCR' && row[key] < 1.20 && row[key] < 100 ? '600' : 'normal',
-                        borderBottom: `1px solid ${colors.cardBorder}`
-                      }}
-                    >
-                      {typeof row[key] === 'number' && key !== 'Year' && key !== 'DSCR'
-                        ? `₱${Math.round(row[key]).toLocaleString()}`
-                        : typeof row[key] === 'number' && key === 'DSCR'
-                        ? `${row[key].toFixed(2)}x`
-                        : row[key]}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '40px', color: colors.textMuted }}>
-            Loading data...
+      {/* 2. SCROLLABLE CONTENT */}
+      <div className="flex-grow overflow-y-auto overflow-x-hidden p-4 pb-32">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* LEFT: INPUTS */}
+          <div className="lg:col-span-1 space-y-5">
+            
+            {/* Macro Card */}
+            <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="p-2 bg-blue-500/10 rounded-lg text-blue-400">🌍</span>
+                <h3 className="font-bold text-slate-200">Macro Economics</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <SmartInput label="Forex" value={inputs.forex_rate} onChange={v => updateField('forex_rate', v)} unit="PHP" />
+                <SmartInput label="Inflation" value={inputs.inflation_rate} onChange={v => updateField('inflation_rate', v)} unit="%" step="0.001" />
+              </div>
+            </div>
+
+            {/* Tech Card */}
+            <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
+              <div className="flex items-center gap-2 mb-4">
+                 <span className="p-2 bg-purple-500/10 rounded-lg text-purple-400">⚡</span>
+                <h3 className="font-bold text-slate-200">Technical Specs</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <SmartInput label="Capacity" value={inputs.capacity_mw} onChange={v => updateField('capacity_mw', v)} unit="MW" />
+                <SmartInput label="Tariff" value={inputs.tariff} onChange={v => updateField('tariff', v)} unit="₱" />
+                <SmartInput label="Fuel Cost" value={inputs.fuel_cost_per_liter} onChange={v => updateField('fuel_cost_per_liter', v)} unit="$" />
+                <SmartInput label="Efficiency" value={inputs.fuel_efficiency} onChange={v => updateField('fuel_efficiency', v)} unit="kWh/L" />
+              </div>
+            </div>
+
+            {/* Finance Card */}
+            <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl">
+              <div className="flex items-center gap-2 mb-4">
+                 <span className="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">🏦</span>
+                <h3 className="font-bold text-slate-200">Financing Structure</h3>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <SmartInput label="Debt %" value={inputs.debt_share} onChange={v => updateField('debt_share', v)} unit="%" />
+                <SmartInput label="Interest" value={inputs.interest_rate} onChange={v => updateField('interest_rate', v)} unit="%" />
+              </div>
+            </div>
+
           </div>
-        )}
+
+          {/* RIGHT: CHART */}
+          <div className="lg:col-span-2">
+            <div className="bg-slate-900 p-5 rounded-2xl border border-slate-800 shadow-xl h-[450px] relative flex flex-col">
+              <h3 className="text-slate-400 font-bold mb-6 text-sm uppercase tracking-widest">Cash Flow Analysis</h3>
+              
+              {loading && (
+                 <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-10 rounded-2xl">
+                   <div className="flex flex-col items-center gap-3">
+                     <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                     <span className="text-xs text-blue-400 font-mono animate-pulse">COMPUTING...</span>
+                   </div>
+                 </div>
+              )}
+
+              <div className="flex-grow">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={data?.annual_data}>
+                    <defs>
+                      <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <XAxis dataKey="Year" stroke="#64748b" tick={{fontSize: 12}} />
+                    <YAxis yAxisId="left" stroke="#64748b" tick={{fontSize: 12}} tickFormatter={(val) => `${(val/1e6).toFixed(0)}`} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)' }} 
+                      itemStyle={{ color: '#fff', fontSize: '13px' }}
+                      formatter={(val) => [`₱${Number(val).toLocaleString()}`, ""]}
+                      labelStyle={{ color: '#94a3b8', marginBottom: '5px' }}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Bar yAxisId="left" dataKey="Revenue" fill="url(#colorRev)" name="Revenue" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                    <Line yAxisId="left" type="monotone" dataKey="Free Cash Flow" stroke="#10b981" strokeWidth={3} dot={{r: 0}} activeDot={{r: 6, fill: '#10b981'}} name="Cash Flow" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+        </div>
       </div>
     </div>
   );
 }
 
 export default FinancialTable;
-
