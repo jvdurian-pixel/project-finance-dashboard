@@ -39,11 +39,17 @@ function FinancialTable({ data, loading }) {
   const totalCapex = data?.total_capex != null ? formatMoney(data.total_capex) : '-';
   const netProfit = data?.annual_net_profit != null ? formatMoney(data.annual_net_profit) : '-';
   const annualGen = data?.total_production_mwh != null ? `${data.total_production_mwh.toFixed(2)} MWh` : '-';
+  const avgDscrVal = data?.avg_dscr != null ? data.avg_dscr : null;
+  const avgDscr = avgDscrVal != null ? `${avgDscrVal.toFixed(2)}x` : '-';
+
+  const wb = data?.yearly_breakdown;
 
   // Color logic
   const isGoodROI = data?.ROI_years != null && data.ROI_years < 999 && data.ROI_years < 10; // Good if payback < 10 years
   const isGoodROE = data?.ROE_years != null && data.ROE_years < 999 && data.ROE_years < 8; // Good if equity payback < 8 years
   const isGoodLCOE = data?.LCOE_kwh != null && data.LCOE_kwh < 5.0; // Good if LCOE < ₱5/kWh
+  const isGoodDSCR = avgDscrVal != null && avgDscrVal >= 1.20;
+  const isBadDSCR = avgDscrVal != null && avgDscrVal < 1.0;
 
   // Prepare chart data (simple annual view)
   const chartData = data ? [
@@ -57,7 +63,7 @@ function FinancialTable({ data, loading }) {
   return (
     <div className="space-y-6">
       {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <StatCard 
           label="LCOE (₱/kWh)" 
           value={lcoe} 
@@ -72,6 +78,17 @@ function FinancialTable({ data, loading }) {
           label="Equity Payback" 
           value={equityPayback} 
           color={isGoodROE ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"} 
+        />
+        <StatCard 
+          label="Avg. DSCR" 
+          value={avgDscr} 
+          color={
+            isGoodDSCR
+              ? "text-green-600 dark:text-green-400"
+              : isBadDSCR
+              ? "text-red-500 dark:text-red-400"
+              : "text-amber-600 dark:text-amber-400"
+          } 
         />
         <StatCard 
           label="Annual Gen (MWh)" 
@@ -177,6 +194,56 @@ function FinancialTable({ data, loading }) {
                   <td className="py-3 px-4 text-gray-600 dark:text-white">LCOE (₱/kWh)</td>
                   <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{lcoe}</td>
                 </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Waterfall Table */}
+      {wb && (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Waterfall (Annual Cash Flows)</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[800px]">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 font-semibold bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-300">Year</th>
+                  <th className="text-right py-3 px-4 font-semibold bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-300">Gen (MWh)</th>
+                  <th className="text-right py-3 px-4 font-semibold bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-300">Revenue</th>
+                  <th className="text-right py-3 px-4 font-semibold bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-300">Opex</th>
+                  <th className="text-right py-3 px-4 font-semibold bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-300">Interest</th>
+                  <th className="text-right py-3 px-4 font-semibold bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-300">Principal</th>
+                  <th className="text-right py-3 px-4 font-semibold bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-300">DSCR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {wb.years.map((year, idx) => (
+                  <tr
+                    key={year}
+                    className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800"
+                  >
+                    <td className="py-3 px-4 text-gray-700 dark:text-white">{year}</td>
+                    <td className="py-3 px-4 text-right font-mono text-gray-900 dark:text-white">
+                      {wb.generation_mwh[idx]?.toFixed(2)}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono text-gray-900 dark:text-white">
+                      {formatMoney(wb.revenue[idx])}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono text-gray-900 dark:text-white">
+                      {formatMoney(wb.opex[idx])}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono text-gray-900 dark:text-white">
+                      {formatMoney(wb.interest_payment[idx])}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono text-gray-900 dark:text-white">
+                      {formatMoney(wb.principal_payment[idx])}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono text-gray-900 dark:text-white">
+                      {`${(wb.dscr[idx] ?? 0).toFixed(2)}x`}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

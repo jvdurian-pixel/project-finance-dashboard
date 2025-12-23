@@ -33,72 +33,136 @@ class ProjectInputs(BaseModel):
 def run_financial_model(inputs: ProjectInputs):
     # Constants (physics & financial assumptions)
     solar_yield = 1450  # kWh/kWp/year (~16.5% CF)
-    # Hydro: 60% CF → 8760 * 0.60 kWh/kW/year
-    hydro_cf = 0.60
-    # Diesel: 15% CF → 8760 * 0.15 kWh/kW/year
-    diesel_cf = 0.15
+    hydro_cf = 0.60     # Hydro: 60% CF → 8760 * 0.60 kWh/kW/year
+    diesel_cf = 0.15    # Diesel: 15% CF → 8760 * 0.15 kWh/kW/year
     degradation_rate = 0.005  # 0.5% per year
-    opex_inflation = 0.03     # 3% per year
+    inflation_rate = 0.03     # 3% per year
 
     # Year 1 production (MWh)
-    solar_gen = inputs.capacity_solar_mw * 1450  # kWh/kWp/year, MW*1450 gives MWh/year
+    solar_gen = inputs.capacity_solar_mw * 1450  # MWh/year (MW * 1450)
     hydro_gen = inputs.capacity_hydro_mw * 8760 * hydro_cf  # kWh/year
     diesel_gen = inputs.capacity_diesel_mw * 8760 * diesel_cf  # kWh/year
 
     # Convert hydro & diesel kWh to MWh
-    yr1_production_solar = solar_gen  # already in MWh/year
+    yr1_production_solar = solar_gen  # MWh/year
     yr1_production_hydro = hydro_gen / 1000.0
     yr1_production_diesel = diesel_gen / 1000.0
 
-    total_yr1_production_mwh = yr1_production_solar + yr1_production_hydro + yr1_production_diesel
+    total_yr1_production_mwh = (
+        yr1_production_solar + yr1_production_hydro + yr1_production_diesel
+    )
 
-    # Total CAPEX and equity
+    # Total CAPEX, equity, and debt
     total_capex = inputs.hard_costs + inputs.soft_costs
     total_equity = total_capex * (1 - inputs.debt_share)
-    annual_interest_base = (total_capex * inputs.debt_share) * inputs.interest_rate
+    total_debt = total_capex * inputs.debt_share
 
-    # Loop over project years for cash flows
+    # Debt amortization (mortgage-style)
+    r = inputs.interest_rate
+    n = inputs.project_duration_years
+    if n <= 0:
+        annual_debt_service = 0.0
+    else:
+        if r > 0:
+            factor = (1 + r) ** n
+            annual_debt_service = total_debt * (r * factor) / (factor - 1) if factor != 1 else 0.0
+        else:
+            annual_debt_service = total_debt / n
+
+    remaining_debt = total_debt
+
+    # Aggregations for LCOE and payback
     lifetime_production_mwh = 0.0
     lifetime_opex = 0.0
-    cumulative_cash_flow = -total_capex
-    project_payback_year = 999
-    equity_payback_year = 999
 
+    # Waterfall / cash flow tracking
+    running_cash = -total_capex  # project-level payback
+    project_payback_year = 999
+
+    # DSCR tracking
+    dscr_list = []
+
+    # Year 1 summary metrics for charting
     annual_revenue_year1 = 0.0
     annual_net_profit_year1 = 0.0
 
-    equity_cumulative = -total_equity
+    # Yearly breakdown lists
+    years = []
+    gen_mwh_list = []
+    revenue_list = []
+    opex_list = []
+    debt_service_list = []
+    principal_list = []
+    interest_list = []
+    net_profit_list = []
+    dscr_year_list = []
+    cumulative_cash_list = []
 
     for year in range(1, inputs.project_duration_years + 1):
+        # Degradation on production
         degradation_factor = (1 - degradation_rate) ** (year - 1)
-        yearly_production_mwh = total_yr1_production_mwh * degradation_factor
-        yearly_production_kwh = yearly_production_mwh * 1000
-        yearly_revenue = yearly_production_kwh * inputs.tariff_php_per_kwh
+        current_production_mwh = total_yr1_production_mwh * degradation_factor
+        current_production_kwh = current_production_mwh * 1000
 
-        yearly_opex = inputs.annual_opex * ((1 + opex_inflation) ** (year - 1))
-        # Assume interest on debt is constant simple interest each year
-        yearly_interest = annual_interest_base
+        # Revenue and Opex with inflation
+        current_revenue = current_production_kwh * inputs.tariff_php_per_kwh
+        current_opex = inputs.annual_opex * ((1 + inflation_rate) ** (year - 1))
 
-        taxable_income = yearly_revenue - yearly_opex - yearly_interest
-        yearly_tax = taxable_income * inputs.tax_rate if taxable_income > 0 else 0.0
-        yearly_net_profit = yearly_revenue - yearly_opex - yearly_interest - yearly_tax
+        # Debt amortization
+        if remaining_debt > 0 and annual_debt_service > 0:
+            interest_payment = remaining_debt * r
+            # Protect against negative principal in very late years
+            principal_payment = max(annual_debt_service - interest_payment, 0.0)
+            if principal_payment > remaining_debt:
+                principal_payment = remaining_debt
+            debt_service = interest_payment + principal_payment
+            remaining_debt = max(remaining_debt - principal_payment, 0.0)
+        else:
+            interest_payment = 0.0
+            principal_payment = 0.0
+            debt_service = 0.0
 
-        # Capture year 1 metrics for charting
-        if year == 1:
-            annual_revenue_year1 = yearly_revenue
-            annual_net_profit_year1 = yearly_net_profit
+        # Tax & profit (simple cash tax, no depreciation)
+        taxable_income = current_revenue - current_opex - interest_payment
+        tax = taxable_income * inputs.tax_rate if taxable_income > 0 else 0.0
+        net_profit = taxable_income - tax
 
-        # Aggregations
-        lifetime_production_mwh += yearly_production_mwh
-        lifetime_opex += yearly_opex
+        # CFADS and DSCR
+        cfads = current_revenue - current_opex  # Cash Flow Available for Debt Service
+        if annual_debt_service > 0:
+            dscr = cfads / annual_debt_service
+        else:
+            dscr = 0.0
 
-        cumulative_cash_flow += yearly_net_profit
-        if cumulative_cash_flow > 0 and project_payback_year == 999:
+        # Running cash (equity-like payback after debt service and tax)
+        free_cash_after_debt = current_revenue - current_opex - tax - debt_service
+        running_cash += free_cash_after_debt
+        if running_cash > 0 and project_payback_year == 999:
             project_payback_year = year
 
-        equity_cumulative += yearly_net_profit
-        if equity_cumulative > 0 and equity_payback_year == 999:
-            equity_payback_year = year
+        # Aggregations for LCOE
+        lifetime_production_mwh += current_production_mwh
+        lifetime_opex += current_opex
+
+        # Capture year 1 metrics for summary
+        if year == 1:
+            annual_revenue_year1 = current_revenue
+            annual_net_profit_year1 = net_profit
+
+        # Store yearly breakdown
+        years.append(year)
+        gen_mwh_list.append(current_production_mwh)
+        revenue_list.append(current_revenue)
+        opex_list.append(current_opex)
+        debt_service_list.append(debt_service)
+        principal_list.append(principal_payment)
+        interest_list.append(interest_payment)
+        net_profit_list.append(net_profit)
+        dscr_year_list.append(dscr)
+        cumulative_cash_list.append(running_cash)
+
+        if dscr > 0:
+            dscr_list.append(dscr)
 
     total_lifetime_cost = total_capex + lifetime_opex
     if lifetime_production_mwh > 0:
@@ -108,7 +172,23 @@ def run_financial_model(inputs: ProjectInputs):
 
     # ROI/ROE years as payback proxies
     roi_years = project_payback_year
-    roe_years = equity_payback_year
+    # For ROE_years, approximate using same project payback for now (can refine later)
+    roe_years = project_payback_year
+
+    avg_dscr = sum(dscr_list) / len(dscr_list) if dscr_list else 0.0
+
+    yearly_breakdown = {
+        "years": years,
+        "generation_mwh": [round(v, 2) for v in gen_mwh_list],
+        "revenue": [round(v, 2) for v in revenue_list],
+        "opex": [round(v, 2) for v in opex_list],
+        "debt_service": [round(v, 2) for v in debt_service_list],
+        "principal_payment": [round(v, 2) for v in principal_list],
+        "interest_payment": [round(v, 2) for v in interest_list],
+        "net_profit": [round(v, 2) for v in net_profit_list],
+        "dscr": [round(v, 3) for v in dscr_year_list],
+        "cumulative_cash": [round(v, 2) for v in cumulative_cash_list],
+    }
 
     return {
         "hard_costs": round(inputs.hard_costs, 2),
@@ -136,5 +216,7 @@ def run_financial_model(inputs: ProjectInputs):
         "ROI_years": roi_years,
         "ROE_years": roe_years,
         "project_payback_year": project_payback_year,
-        "equity_payback_year": equity_payback_year
+        "equity_payback_year": project_payback_year,
+        "avg_dscr": round(avg_dscr, 2),
+        "yearly_breakdown": yearly_breakdown,
     }
