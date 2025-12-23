@@ -15,9 +15,9 @@ const formatMoney = (val) => {
 };
 
 // --- COMPONENT: Stat Card ---
-const StatCard = ({ label, value, color = "text-gray-900" }) => (
-  <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-    <span className="text-xs text-gray-500 uppercase font-semibold block mb-1">{label}</span>
+const StatCard = ({ label, value, color = "text-gray-900 dark:text-white" }) => (
+  <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 shadow-sm">
+    <span className="text-xs text-gray-500 dark:text-gray-400 uppercase font-semibold block mb-1">{label}</span>
     <span className={`text-lg font-bold ${color}`}>{value}</span>
   </div>
 );
@@ -26,8 +26,8 @@ function FinancialTable({ data, loading }) {
   // Handle empty state
   if (!data && !loading) {
     return (
-      <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-        <p className="text-gray-500">Enter project inputs to see financial metrics</p>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-8 text-center">
+        <p className="text-gray-500 dark:text-gray-400">Enter project inputs to see financial metrics</p>
       </div>
     );
   }
@@ -47,12 +47,9 @@ function FinancialTable({ data, loading }) {
   // Prepare chart data (simple annual view)
   const chartData = data ? [
     {
-      name: 'Revenue',
-      value: data.annual_revenue || 0
-    },
-    {
-      name: 'Net Profit',
-      value: data.annual_net_profit || 0
+      name: 'Annual',
+      Revenue: data.annual_revenue || 0,
+      'Net Profit': data.annual_net_profit || 0
     }
   ] : [];
 
@@ -81,40 +78,45 @@ function FinancialTable({ data, loading }) {
       </div>
 
       {/* Chart */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Financial Overview</h3>
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Financial Overview</h3>
         {loading ? (
           <div className="flex items-center justify-center h-[400px]">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent mx-auto mb-2"></div>
-              <p className="text-gray-500 text-sm">Computing...</p>
+              <p className="text-gray-500 dark:text-gray-400 text-sm">Computing...</p>
             </div>
           </div>
         ) : data ? (
           <ResponsiveContainer width="100%" height={400}>
             <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="name" stroke="#6b7280" tick={{fontSize: 12}} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" className="dark:stroke-gray-700" />
+              <XAxis dataKey="name" stroke="#6b7280" className="dark:stroke-gray-400" tick={{fontSize: 12, fill: '#6b7280'}} />
               <YAxis 
                 stroke="#6b7280" 
-                tick={{fontSize: 12}}
+                className="dark:stroke-gray-400"
+                tick={{fontSize: 12, fill: '#6b7280'}}
                 tickFormatter={(val) => `₱${(val/1e6).toFixed(1)}M`}
               />
               <Tooltip 
                 contentStyle={{ 
-                  backgroundColor: '#fff', 
-                  border: '1px solid #e5e7eb', 
+                  backgroundColor: '#1f2937', 
+                  border: '1px solid #374151', 
                   borderRadius: '8px',
-                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.3)',
+                  color: '#fff'
                 }}
+                itemStyle={{ color: '#fff' }}
+                labelStyle={{ color: '#d1d5db' }}
                 formatter={(val) => formatMoney(val)}
               />
-              <Legend />
-              <Bar dataKey="value" fill="#3b82f6" name="Revenue" radius={[4, 4, 0, 0]} />
+              <Legend wrapperStyle={{ color: '#6b7280' }} />
+              <Bar dataKey="Revenue" fill="#34d399" name="Revenue" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Net Profit" fill="#818cf8" name="Net Profit" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (
-          <div className="flex items-center justify-center h-[400px] text-gray-400">
+          <div className="flex items-center justify-center h-[400px] text-gray-400 dark:text-gray-500">
             <p>No data available</p>
           </div>
         )}
@@ -122,52 +124,52 @@ function FinancialTable({ data, loading }) {
 
       {/* Results Table */}
       {data && (
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Detailed Results</h3>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Detailed Results</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Metric</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Value</th>
+                <tr className="border-b border-gray-200 dark:border-gray-700">
+                  <th className="text-left py-3 px-4 font-semibold bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-300">Metric</th>
+                  <th className="text-right py-3 px-4 font-semibold bg-gray-50 dark:bg-gray-700 text-gray-500 dark:text-gray-300">Value</th>
                 </tr>
               </thead>
               <tbody>
-                <tr className="border-b border-gray-100">
-                  <td className="py-3 px-4 text-gray-600">Total Capex</td>
-                  <td className="py-3 px-4 text-right font-mono">{totalCapex}</td>
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <td className="py-3 px-4 text-gray-600 dark:text-white">Total Capex</td>
+                  <td className="py-3 px-4 text-right font-mono text-gray-900 dark:text-white">{totalCapex}</td>
                 </tr>
-                <tr className="border-b border-gray-100">
-                  <td className="py-3 px-4 text-gray-600">Annual Revenue</td>
-                  <td className="py-3 px-4 text-right font-mono">{formatMoney(data.annual_revenue)}</td>
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <td className="py-3 px-4 text-gray-600 dark:text-white">Annual Revenue</td>
+                  <td className="py-3 px-4 text-right font-mono text-gray-900 dark:text-white">{formatMoney(data.annual_revenue)}</td>
                 </tr>
-                <tr className="border-b border-gray-100">
-                  <td className="py-3 px-4 text-gray-600">Annual Opex</td>
-                  <td className="py-3 px-4 text-right font-mono">{formatMoney(data.annual_opex)}</td>
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <td className="py-3 px-4 text-gray-600 dark:text-white">Annual Opex</td>
+                  <td className="py-3 px-4 text-right font-mono text-gray-900 dark:text-white">{formatMoney(data.annual_opex)}</td>
                 </tr>
-                <tr className="border-b border-gray-100">
-                  <td className="py-3 px-4 text-gray-600">Annual Interest</td>
-                  <td className="py-3 px-4 text-right font-mono">{formatMoney(data.annual_interest)}</td>
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <td className="py-3 px-4 text-gray-600 dark:text-white">Annual Interest</td>
+                  <td className="py-3 px-4 text-right font-mono text-gray-900 dark:text-white">{formatMoney(data.annual_interest)}</td>
                 </tr>
-                <tr className="border-b border-gray-100">
-                  <td className="py-3 px-4 text-gray-600">Annual Tax</td>
-                  <td className="py-3 px-4 text-right font-mono">{formatMoney(data.annual_tax)}</td>
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <td className="py-3 px-4 text-gray-600 dark:text-white">Annual Tax</td>
+                  <td className="py-3 px-4 text-right font-mono text-gray-900 dark:text-white">{formatMoney(data.annual_tax)}</td>
                 </tr>
-                <tr className="border-b border-gray-100">
-                  <td className="py-3 px-4 text-gray-600">Annual Net Profit</td>
-                  <td className="py-3 px-4 text-right font-mono font-semibold">{netProfit}</td>
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <td className="py-3 px-4 text-gray-600 dark:text-white">Annual Net Profit</td>
+                  <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{netProfit}</td>
                 </tr>
-                <tr className="border-b border-gray-100">
-                  <td className="py-3 px-4 text-gray-600">ROI</td>
-                  <td className="py-3 px-4 text-right font-mono font-semibold">{roi}</td>
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <td className="py-3 px-4 text-gray-600 dark:text-white">ROI</td>
+                  <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{roi}</td>
                 </tr>
-                <tr className="border-b border-gray-100">
-                  <td className="py-3 px-4 text-gray-600">ROE</td>
-                  <td className="py-3 px-4 text-right font-mono font-semibold">{roe}</td>
+                <tr className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
+                  <td className="py-3 px-4 text-gray-600 dark:text-white">ROE</td>
+                  <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{roe}</td>
                 </tr>
-                <tr>
-                  <td className="py-3 px-4 text-gray-600">LCOE</td>
-                  <td className="py-3 px-4 text-right font-mono font-semibold">{lcoe}</td>
+                <tr className="bg-white dark:bg-gray-800">
+                  <td className="py-3 px-4 text-gray-600 dark:text-white">LCOE</td>
+                  <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{lcoe}</td>
                 </tr>
               </tbody>
             </table>

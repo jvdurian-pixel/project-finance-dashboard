@@ -32,7 +32,7 @@ const SmartInput = ({ label, value, onChange, unit, step = "0.01" }) => {
 
   return (
     <div className="flex flex-col space-y-1.5">
-      <label className="text-xs text-gray-600 font-medium">{label}</label>
+      <label className="text-xs text-gray-600 dark:text-gray-300 font-medium">{label}</label>
       <div className="relative">
         <input
           type="number"
@@ -42,16 +42,16 @@ const SmartInput = ({ label, value, onChange, unit, step = "0.01" }) => {
           onBlur={handleBlur}
           onFocus={handleFocus}
           inputMode="decimal"
-          className={`w-full bg-white border rounded-lg p-2.5 pr-8 text-sm text-right
+          className={`w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg p-2.5 pr-8 text-sm text-right text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500
                      transition-all duration-200
                      ${isFocused 
-                       ? 'border-blue-500 ring-2 ring-blue-200' 
-                       : 'border-gray-300 hover:border-gray-400'
+                       ? 'border-blue-500 ring-2 ring-blue-200 dark:ring-blue-800' 
+                       : 'hover:border-gray-400 dark:hover:border-gray-500'
                      }
                      focus:outline-none`}
         />
         {unit && (
-          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 text-xs pointer-events-none">
+          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 dark:text-gray-400 text-xs pointer-events-none">
             {unit}
           </span>
         )}
@@ -130,13 +130,13 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 p-4 md:p-6">
         
         {/* LEFT COLUMN: INPUTS */}
         <div className="lg:col-span-4">
-          <div className="bg-white rounded-xl shadow-sm p-6 sticky top-4">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Project Inputs</h2>
+          <div className="bg-white dark:bg-gray-800 border dark:border-gray-700 rounded-xl shadow-sm p-6 sticky top-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-6">Project Inputs</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <SmartInput 
                 label="Hard Costs (₱)" 
