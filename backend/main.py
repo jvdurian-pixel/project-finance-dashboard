@@ -28,8 +28,9 @@ class ModelInputs(BaseModel):
     degradation_rate: float = 0.005
     
     # Capex
-    capex_usd: float = 1500000
-    capex_forex_exposure: float = 0.70
+    hard_costs: float = 1000000
+    soft_costs: float = 500000
+    annual_production_mwh: float = 1000
     
     # Opex
     fuel_cost_usd_liter: float = 0.90
@@ -49,10 +50,12 @@ class ModelInputs(BaseModel):
 def run_financial_model(inputs: ModelInputs):
     project_years = 30
     
-    # Calculate total CAPEX in PHP
-    capex_local_php = inputs.capex_usd * inputs.capex_forex_exposure * inputs.forex_rate
-    capex_usd_portion = inputs.capex_usd * (1 - inputs.capex_forex_exposure)
-    capex_total_php = capex_local_php + (capex_usd_portion * inputs.forex_rate)
+    # Safety logic: prevent DivisionByZero errors
+    annual_production_mwh = inputs.annual_production_mwh if inputs.annual_production_mwh > 0 else 1.0
+    
+    # Calculate total CAPEX (Hard + Soft costs, converted to PHP)
+    total_capex_usd = inputs.hard_costs + inputs.soft_costs
+    capex_total_php = total_capex_usd * inputs.forex_rate
     
     # Calculate debt amount
     debt_amount = capex_total_php * inputs.debt_ratio
@@ -75,6 +78,7 @@ def run_financial_model(inputs: ModelInputs):
     dscr_values = []
     roe_values = []
     total_net_profit = 0.0
+    total_annual_opex = 0.0
     
     # Calculation loop for 30 years
     for year in range(1, project_years + 1):
@@ -109,9 +113,12 @@ def run_financial_model(inputs: ModelInputs):
         # Debt Service (only during tenor period)
         current_debt_payment = debt_payment if year <= inputs.tenor_years else 0.0
         
-        # Calculate Net Profit (Revenue - Opex - Tax - Interest Payment)
+        # Calculate Net Profit (Revenue - Opex - Tax - Interest)
         # Note: Using debt_payment as interest payment (includes principal + interest)
         annual_net_profit = revenue - total_opex - tax - current_debt_payment
+        
+        # Accumulate annual opex for LCOE calculation
+        total_annual_opex += total_opex
         
         # Calculate ROE (Net Profit / Equity) * 100 for percentage
         # Equity = Capex * (1 - Debt_Share)
@@ -176,13 +183,24 @@ def run_financial_model(inputs: ModelInputs):
     # Global ROI (Total Net Profit / Total Capex) * 100 for percentage
     global_roi = ((total_net_profit / capex_total_php) * 100) if capex_total_php > 0 else 0.0
     
+    # Calculate LCOE (Levelized Cost of Energy)
+    # Assuming 25-year project life for LCOE calculation
+    lcoe_years = 25
+    lifetime_production = annual_production_mwh * lcoe_years
+    average_annual_opex = total_annual_opex / project_years if project_years > 0 else 0.0
+    total_lifetime_cost = capex_total_php + (average_annual_opex * lcoe_years)
+    lcoe = (total_lifetime_cost / lifetime_production) if lifetime_production > 0 else 0.0
+    
     # Summary metrics
     summary_metrics = {
         "NPV": round(npv, 2),
         "IRR": round(irr, 4) if irr != 0.0 else 0.0,
         "Avg_DSCR": round(avg_dscr, 2),
         "Avg_ROE": round(avg_roe, 2),
-        "ROI": round(global_roi, 2)
+        "ROI": round(global_roi, 2),
+        "LCOE": round(lcoe, 2),
+        "hard_costs": round(inputs.hard_costs, 2),
+        "soft_costs": round(inputs.soft_costs, 2)
     }
     
     return {

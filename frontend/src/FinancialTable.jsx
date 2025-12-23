@@ -85,6 +85,17 @@ const StatCard = ({ label, value, color, isGood }) => (
   </div>
 );
 
+// --- UTILITY: Format Money ---
+const formatMoney = (value) => {
+  if (value == null || isNaN(value)) return "$0.00";
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+};
+
 function FinancialTable() {
   // --- STATE ---
   // We store everything as STRINGS or NUMBERS, doesn't matter, backend handles conversion.
@@ -102,7 +113,9 @@ function FinancialTable() {
     // Finance
     tariff: 8.50,
     opex_per_kw: 15.0,
-    capex_per_mw: 1000000,
+    hardCosts: 1000000,
+    softCosts: 500000,
+    production: 1000,
     debt_share: 0.70,
     interest_rate: 0.08,
     loan_term: 10
@@ -156,8 +169,9 @@ function FinancialTable() {
         degradation_rate: debouncedInputs.degradation || 0.005,
         
         // Capex
-        capex_usd: (debouncedInputs.capex_per_mw || 1000000) * capacityMW / (debouncedInputs.forex_rate || 58.0),
-        capex_forex_exposure: 0.70, // Default value
+        hard_costs: parseFloat(debouncedInputs.hardCosts) || 1000000,
+        soft_costs: parseFloat(debouncedInputs.softCosts) || 500000,
+        annual_production_mwh: parseFloat(debouncedInputs.production) || 1000,
         
         // Opex
         fuel_cost_usd_liter: debouncedInputs.fuel_cost_per_liter || 0.90,
@@ -199,12 +213,14 @@ function FinancialTable() {
   const dscr = metrics.Avg_DSCR != null ? metrics.Avg_DSCR.toFixed(2) + "x" : "-";
   const roi = metrics.ROI != null ? metrics.ROI.toFixed(2) + "%" : "-";
   const avgRoe = metrics.Avg_ROE != null ? metrics.Avg_ROE.toFixed(2) + "%" : "-";
+  const lcoe = metrics.LCOE != null ? formatMoney(metrics.LCOE) + "/MWh" : "-";
   
   // Logic: Green if IRR > 12% and DSCR > 1.15
   const isProfitable = metrics.IRR > 0.12; 
   const isBankable = metrics.Avg_DSCR > 1.15;
   const isGoodROI = metrics.ROI > 0.15; // 15% ROI threshold
   const isGoodROE = metrics.Avg_ROE > 0.12; // 12% ROE threshold
+  const isGoodLCOE = metrics.LCOE != null && metrics.LCOE < 100; // Good if under $100/MWh
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white overflow-hidden font-sans">
@@ -227,6 +243,7 @@ function FinancialTable() {
             <StatCard label="Avg DSCR" value={dscr} color={isBankable ? "text-emerald-400" : "text-amber-400"} isGood={isBankable} />
             <StatCard label="ROI" value={roi} color={isGoodROI ? "text-emerald-400" : "text-amber-400"} isGood={isGoodROI} />
             <StatCard label="Avg ROE" value={avgRoe} color={isGoodROE ? "text-emerald-400" : "text-amber-400"} isGood={isGoodROE} />
+            <StatCard label="LCOE ($/MWh)" value={lcoe} color={isGoodLCOE ? "text-emerald-400" : "text-amber-400"} isGood={isGoodLCOE} />
           </div>
         </div>
       </div>
@@ -282,6 +299,9 @@ function FinancialTable() {
                 <h3 className="font-bold text-lg text-slate-100">Financing Structure</h3>
               </div>
               <div className="grid grid-cols-2 gap-4">
+                <SmartInput label="Hard Costs" value={inputs.hardCosts} onChange={v => updateField('hardCosts', v)} unit="$" />
+                <SmartInput label="Soft Costs" value={inputs.softCosts} onChange={v => updateField('softCosts', v)} unit="$" />
+                <SmartInput label="Production (MWh)" value={inputs.production} onChange={v => updateField('production', v)} unit="MWh" />
                 <SmartInput label="Debt %" value={inputs.debt_share} onChange={v => updateField('debt_share', v)} unit="%" />
                 <SmartInput label="Interest" value={inputs.interest_rate} onChange={v => updateField('interest_rate', v)} unit="%" />
                 <SmartInput label="Loan Term" value={inputs.loan_term} onChange={v => updateField('loan_term', v)} unit="years" />
@@ -352,7 +372,7 @@ function FinancialTable() {
                       }} 
                       itemStyle={{ color: '#fff', fontSize: '13px', padding: '4px 0' }}
                       formatter={(val, name) => {
-                        const formatted = `₱${Number(val).toLocaleString('en-US', {maximumFractionDigits: 0})}`;
+                        const formatted = formatMoney(Number(val));
                         return [formatted, name];
                       }}
                       labelStyle={{ color: '#cbd5e1', marginBottom: '8px', fontSize: '14px', fontWeight: '600' }}
