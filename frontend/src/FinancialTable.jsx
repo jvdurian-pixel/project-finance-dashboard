@@ -85,12 +85,12 @@ const StatCard = ({ label, value, color, isGood }) => (
   </div>
 );
 
-// --- UTILITY: Format Money ---
+// --- UTILITY: Format Money (PHP) ---
 const formatMoney = (value) => {
-  if (value == null || isNaN(value)) return "$0.00";
-  return new Intl.NumberFormat('en-US', {
+  if (value == null || isNaN(value)) return "₱0.00";
+  return new Intl.NumberFormat('en-PH', {
     style: 'currency',
-    currency: 'USD',
+    currency: 'PHP',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   }).format(value);
@@ -98,27 +98,16 @@ const formatMoney = (value) => {
 
 function FinancialTable() {
   // --- STATE ---
-  // We store everything as STRINGS or NUMBERS, doesn't matter, backend handles conversion.
   const [inputs, setInputs] = useState({
-    // Macro
-    inflation_rate: 0.04,
-    forex_rate: 58.0,
-    forex_escalation: 0.02,
-    // Tech
-    capacity_mw: 50,
-    capacity_factor: 0.85,
-    degradation: 0.005,
-    fuel_cost_per_liter: 0.90,
-    fuel_efficiency: 3.8,
-    // Finance
-    tariff: 8.50,
-    opex_per_kw: 15.0,
     hardCosts: 1000000,
     softCosts: 500000,
     production: 1000,
-    debt_share: 0.70,
-    interest_rate: 0.08,
-    loan_term: 10
+    annualRevenue: 10000000,
+    annualOpex: 2000000,
+    taxRate: 0.25,
+    interestRate: 0.08,
+    debtShare: 0.70,
+    projectDuration: 25
   });
 
   const [debouncedInputs, setDebouncedInputs] = useState(inputs);
@@ -145,55 +134,29 @@ function FinancialTable() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Map frontend field names to backend field names
-      const capacityFactor = debouncedInputs.capacity_factor || 0.85;
-      const capacityMW = debouncedInputs.capacity_mw || 50;
-      const capacityKW = capacityMW * 1000;
-      // Generation = Capacity (MW) * Capacity Factor * Hours per year * 1000 (kW/MW)
-      const generationKWh = capacityMW * capacityFactor * 8760 * 1000;
-      
-      // Convert opex_per_kw (per kW capacity per year) to variable_opex_php (per kWh)
-      // If opex_per_kw is annual opex per kW of capacity, convert to per kWh:
-      const opexPerKW = debouncedInputs.opex_per_kw || 15.0;
-      const variableOpexPHP = generationKWh > 0 ? (opexPerKW * capacityKW) / generationKWh : 0;
-      
-      const backendInputs = {
-        // Macro
-        forex_rate: debouncedInputs.forex_rate || 58.0,
-        forex_escalation: debouncedInputs.forex_escalation || 0.02,
-        local_inflation: debouncedInputs.inflation_rate || 0.04,
-        
-        // Revenue
-        tariff_php: debouncedInputs.tariff || 8.50,
-        generation_kwh: generationKWh,
-        degradation_rate: debouncedInputs.degradation || 0.005,
-        
-        // Capex
-        hard_costs: parseFloat(debouncedInputs.hardCosts) || 1000000,
-        soft_costs: parseFloat(debouncedInputs.softCosts) || 500000,
-        annual_production_mwh: parseFloat(debouncedInputs.production) || 1000,
-        
-        // Opex
-        fuel_cost_usd_liter: debouncedInputs.fuel_cost_per_liter || 0.90,
-        fuel_efficiency: debouncedInputs.fuel_efficiency || 3.8,
-        variable_opex_php: variableOpexPHP,
-        
-        // Debt
-        debt_ratio: debouncedInputs.debt_share || 0.70,
-        interest_rate: debouncedInputs.interest_rate || 0.08,
-        tenor_years: debouncedInputs.loan_term || 10,
-        
-        // Tax
-        tax_rate: 0.25 // Default value
+      // Map state explicitly to Python keys
+      const body = {
+        hard_costs: parseFloat(debouncedInputs.hardCosts) || 0,
+        soft_costs: parseFloat(debouncedInputs.softCosts) || 0,
+        annual_production_mwh: parseFloat(debouncedInputs.production) || 0,
+        annual_revenue: parseFloat(debouncedInputs.annualRevenue) || 0,
+        annual_opex: parseFloat(debouncedInputs.annualOpex) || 0,
+        tax_rate: parseFloat(debouncedInputs.taxRate) || 0,
+        interest_rate: parseFloat(debouncedInputs.interestRate) || 0,
+        debt_share: parseFloat(debouncedInputs.debtShare) || 0,
+        project_duration_years: parseInt(debouncedInputs.projectDuration) || 25
       };
+      
+      // Console debug
+      console.log('Sending payload:', body);
       
       const response = await fetch('https://project-finance-dashboard.onrender.com/calculate-model', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(backendInputs)
+        body: JSON.stringify(body)
       });
       const result = await response.json();
-      if (result.annual_data) setData(result);
+      setData(result);
     } catch (error) {
       console.error("Fetch error:", error);
     }
@@ -208,19 +171,16 @@ function FinancialTable() {
     setInputs(prev => ({ ...prev, [field]: val }));
   };
 
-  const metrics = data?.summary_metrics || {};
-  const irr = metrics.IRR != null ? (metrics.IRR * 100).toFixed(2) + "%" : "-";
-  const dscr = metrics.Avg_DSCR != null ? metrics.Avg_DSCR.toFixed(2) + "x" : "-";
-  const roi = metrics.ROI != null ? metrics.ROI.toFixed(2) + "%" : "-";
-  const avgRoe = metrics.Avg_ROE != null ? metrics.Avg_ROE.toFixed(2) + "%" : "-";
-  const lcoe = metrics.LCOE != null ? formatMoney(metrics.LCOE) + "/MWh" : "-";
+  const roi = data?.ROI != null ? data.ROI.toFixed(2) + "%" : "-";
+  const roe = data?.ROE != null ? data.ROE.toFixed(2) + "%" : "-";
+  const lcoe = data?.LCOE != null ? formatMoney(data.LCOE) + "/MWh" : "-";
+  const totalCapex = data?.total_capex != null ? formatMoney(data.total_capex) : "-";
+  const netProfit = data?.annual_net_profit != null ? formatMoney(data.annual_net_profit) : "-";
   
-  // Logic: Green if IRR > 12% and DSCR > 1.15
-  const isProfitable = metrics.IRR > 0.12; 
-  const isBankable = metrics.Avg_DSCR > 1.15;
-  const isGoodROI = metrics.ROI > 0.15; // 15% ROI threshold
-  const isGoodROE = metrics.Avg_ROE > 0.12; // 12% ROE threshold
-  const isGoodLCOE = metrics.LCOE != null && metrics.LCOE < 100; // Good if under $100/MWh
+  // Logic: Green if ROI > 15% and ROE > 12%
+  const isGoodROI = data?.ROI > 15; // 15% ROI threshold
+  const isGoodROE = data?.ROE > 12; // 12% ROE threshold
+  const isGoodLCOE = data?.LCOE != null && data.LCOE < 5000; // Good if under ₱5000/MWh
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white overflow-hidden font-sans">
@@ -239,11 +199,11 @@ function FinancialTable() {
           </div>
           
           <div className="flex space-x-2 sm:space-x-3 w-full sm:w-auto justify-end overflow-x-auto scrollbar-hide">
-            <StatCard label="IRR" value={irr} color={isProfitable ? "text-emerald-400" : "text-rose-400"} isGood={isProfitable} />
-            <StatCard label="Avg DSCR" value={dscr} color={isBankable ? "text-emerald-400" : "text-amber-400"} isGood={isBankable} />
             <StatCard label="ROI" value={roi} color={isGoodROI ? "text-emerald-400" : "text-amber-400"} isGood={isGoodROI} />
-            <StatCard label="Avg ROE" value={avgRoe} color={isGoodROE ? "text-emerald-400" : "text-amber-400"} isGood={isGoodROE} />
-            <StatCard label="LCOE ($/MWh)" value={lcoe} color={isGoodLCOE ? "text-emerald-400" : "text-amber-400"} isGood={isGoodLCOE} />
+            <StatCard label="ROE" value={roe} color={isGoodROE ? "text-emerald-400" : "text-amber-400"} isGood={isGoodROE} />
+            <StatCard label="LCOE (₱/MWh)" value={lcoe} color={isGoodLCOE ? "text-emerald-400" : "text-amber-400"} isGood={isGoodLCOE} />
+            <StatCard label="Total Capex" value={totalCapex} color="text-slate-300" isGood={false} />
+            <StatCard label="Net Profit" value={netProfit} color="text-slate-300" isGood={false} />
           </div>
         </div>
       </div>
@@ -255,56 +215,24 @@ function FinancialTable() {
           {/* LEFT: INPUTS */}
           <div className="lg:col-span-1 space-y-6">
             
-            {/* Macro Card */}
+            {/* Project Inputs Card */}
             <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-sm p-6 rounded-2xl border border-slate-700/50 shadow-2xl hover:shadow-blue-500/10 transition-all duration-300 hover:border-slate-600/50">
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-2.5 bg-gradient-to-br from-blue-500/20 to-blue-600/10 rounded-xl border border-blue-500/30">
-                  <span className="text-xl">🌍</span>
+                  <span className="text-xl">📊</span>
                 </div>
-                <h3 className="font-bold text-lg text-slate-100">Macro Economics</h3>
+                <h3 className="font-bold text-lg text-slate-100">Project Inputs</h3>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <SmartInput label="Forex" value={inputs.forex_rate} onChange={v => updateField('forex_rate', v)} unit="PHP" />
-                <SmartInput label="Inflation" value={inputs.inflation_rate} onChange={v => updateField('inflation_rate', v)} unit="%" step="0.001" />
-                <SmartInput label="Forex Escalation" value={inputs.forex_escalation} onChange={v => updateField('forex_escalation', v)} unit="%" step="0.001" />
-              </div>
-            </div>
-
-            {/* Tech Card */}
-            <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-sm p-6 rounded-2xl border border-slate-700/50 shadow-2xl hover:shadow-purple-500/10 transition-all duration-300 hover:border-slate-600/50">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2.5 bg-gradient-to-br from-purple-500/20 to-purple-600/10 rounded-xl border border-purple-500/30">
-                  <span className="text-xl">⚡</span>
-                </div>
-                <h3 className="font-bold text-lg text-slate-100">Technical Specs</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <SmartInput label="Capacity" value={inputs.capacity_mw} onChange={v => updateField('capacity_mw', v)} unit="MW" />
-                <SmartInput label="Capacity Factor" value={inputs.capacity_factor} onChange={v => updateField('capacity_factor', v)} unit="" step="0.01" />
-                <SmartInput label="Tariff" value={inputs.tariff} onChange={v => updateField('tariff', v)} unit="₱" />
-                <SmartInput label="Degradation" value={inputs.degradation} onChange={v => updateField('degradation', v)} unit="%" step="0.001" />
-                <SmartInput label="Fuel Cost" value={inputs.fuel_cost_per_liter} onChange={v => updateField('fuel_cost_per_liter', v)} unit="$" />
-                <SmartInput label="Efficiency" value={inputs.fuel_efficiency} onChange={v => updateField('fuel_efficiency', v)} unit="kWh/L" />
-                <SmartInput label="Opex per kW" value={inputs.opex_per_kw} onChange={v => updateField('opex_per_kw', v)} unit="₱" />
-                <SmartInput label="Capex per MW" value={inputs.capex_per_mw} onChange={v => updateField('capex_per_mw', v)} unit="₱" />
-              </div>
-            </div>
-
-            {/* Finance Card */}
-            <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-sm p-6 rounded-2xl border border-slate-700/50 shadow-2xl hover:shadow-emerald-500/10 transition-all duration-300 hover:border-slate-600/50">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-2.5 bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 rounded-xl border border-emerald-500/30">
-                  <span className="text-xl">🏦</span>
-                </div>
-                <h3 className="font-bold text-lg text-slate-100">Financing Structure</h3>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <SmartInput label="Hard Costs" value={inputs.hardCosts} onChange={v => updateField('hardCosts', v)} unit="$" />
-                <SmartInput label="Soft Costs" value={inputs.softCosts} onChange={v => updateField('softCosts', v)} unit="$" />
+                <SmartInput label="Hard Costs (₱)" value={inputs.hardCosts} onChange={v => updateField('hardCosts', v)} unit="₱" />
+                <SmartInput label="Soft Costs (₱)" value={inputs.softCosts} onChange={v => updateField('softCosts', v)} unit="₱" />
                 <SmartInput label="Production (MWh)" value={inputs.production} onChange={v => updateField('production', v)} unit="MWh" />
-                <SmartInput label="Debt %" value={inputs.debt_share} onChange={v => updateField('debt_share', v)} unit="%" />
-                <SmartInput label="Interest" value={inputs.interest_rate} onChange={v => updateField('interest_rate', v)} unit="%" />
-                <SmartInput label="Loan Term" value={inputs.loan_term} onChange={v => updateField('loan_term', v)} unit="years" />
+                <SmartInput label="Annual Revenue (₱)" value={inputs.annualRevenue} onChange={v => updateField('annualRevenue', v)} unit="₱" />
+                <SmartInput label="Annual Opex (₱)" value={inputs.annualOpex} onChange={v => updateField('annualOpex', v)} unit="₱" />
+                <SmartInput label="Tax Rate" value={inputs.taxRate} onChange={v => updateField('taxRate', v)} unit="%" step="0.001" />
+                <SmartInput label="Interest Rate" value={inputs.interestRate} onChange={v => updateField('interestRate', v)} unit="%" step="0.001" />
+                <SmartInput label="Debt Share" value={inputs.debtShare} onChange={v => updateField('debtShare', v)} unit="" step="0.01" />
+                <SmartInput label="Project Duration" value={inputs.projectDuration} onChange={v => updateField('projectDuration', v)} unit="years" />
               </div>
             </div>
 
@@ -335,82 +263,20 @@ function FinancialTable() {
                  </div>
               )}
 
-              <div className="flex-grow">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={data?.annual_data}>
-                    <defs>
-                      <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.9}/>
-                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.2}/>
-                      </linearGradient>
-                      <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.9}/>
-                        <stop offset="95%" stopColor="#a855f7" stopOpacity={0.2}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} opacity={0.3} />
-                    <XAxis 
-                      dataKey="Year" 
-                      stroke="#64748b" 
-                      tick={{fontSize: 11, fill: '#94a3b8'}} 
-                      axisLine={{stroke: '#475569'}}
-                    />
-                    <YAxis 
-                      yAxisId="left" 
-                      stroke="#64748b" 
-                      tick={{fontSize: 11, fill: '#94a3b8'}} 
-                      axisLine={{stroke: '#475569'}}
-                      tickFormatter={(val) => `₱${(val/1e6).toFixed(0)}M`} 
-                    />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: '#0f172a', 
-                        border: '1px solid #334155', 
-                        borderRadius: '12px', 
-                        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.2)',
-                        padding: '12px'
-                      }} 
-                      itemStyle={{ color: '#fff', fontSize: '13px', padding: '4px 0' }}
-                      formatter={(val, name) => {
-                        const formatted = formatMoney(Number(val));
-                        return [formatted, name];
-                      }}
-                      labelStyle={{ color: '#cbd5e1', marginBottom: '8px', fontSize: '14px', fontWeight: '600' }}
-                      cursor={{fill: 'rgba(59, 130, 246, 0.1)'}}
-                    />
-                    <Legend 
-                      wrapperStyle={{ paddingTop: '20px' }} 
-                      iconType="line"
-                      formatter={(value) => <span style={{color: '#cbd5e1', fontSize: '12px'}}>{value}</span>}
-                    />
-                    <Bar 
-                      yAxisId="left" 
-                      dataKey="Revenue" 
-                      fill="url(#colorRev)" 
-                      name="Revenue" 
-                      radius={[6, 6, 0, 0]} 
-                      maxBarSize={60}
-                    />
-                    <Bar 
-                      yAxisId="left" 
-                      dataKey="Net_Profit" 
-                      fill="url(#colorProfit)" 
-                      name="Net Profit" 
-                      radius={[6, 6, 0, 0]} 
-                      maxBarSize={60}
-                    />
-                    <Line 
-                      yAxisId="left" 
-                      type="monotone" 
-                      dataKey="Free_Cash_Flow" 
-                      stroke="#10b981" 
-                      strokeWidth={3} 
-                      dot={{r: 0}} 
-                      activeDot={{r: 8, fill: '#10b981', stroke: '#fff', strokeWidth: 2}} 
-                      name="Cash Flow"
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
+              <div className="flex-grow flex items-center justify-center">
+                <div className="text-center text-slate-400">
+                  <p className="text-lg mb-2">Financial Metrics</p>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div className="bg-slate-800/50 p-4 rounded-lg">
+                      <p className="text-xs text-slate-400 mb-1">Total Capex</p>
+                      <p className="text-xl font-bold">{totalCapex}</p>
+                    </div>
+                    <div className="bg-slate-800/50 p-4 rounded-lg">
+                      <p className="text-xs text-slate-400 mb-1">Annual Net Profit</p>
+                      <p className="text-xl font-bold">{netProfit}</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
