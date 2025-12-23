@@ -33,16 +33,16 @@ function FinancialTable({ data, loading }) {
   }
 
   // Format values with proper handling
-  const lcoe = data?.LCOE != null ? `${formatMoney(data.LCOE)}/MWh` : '-';
-  const roi = data?.ROI != null ? `${data.ROI.toFixed(2)}%` : '-';
-  const roe = data?.ROE != null ? `${data.ROE.toFixed(2)}%` : '-';
+  const lcoe = data?.LCOE_kwh != null ? `₱${data.LCOE_kwh.toFixed(2)}/kWh` : '-';
+  const roi = data?.ROI_years != null ? (data.ROI_years >= 999 ? 'N/A' : `${data.ROI_years.toFixed(2)} Years`) : '-';
+  const roe = data?.ROE_years != null ? (data.ROE_years >= 999 ? 'N/A' : `${data.ROE_years.toFixed(2)} Years`) : '-';
   const totalCapex = data?.total_capex != null ? formatMoney(data.total_capex) : '-';
   const netProfit = data?.annual_net_profit != null ? formatMoney(data.annual_net_profit) : '-';
 
   // Color logic
-  const isGoodROI = data?.ROI > 15;
-  const isGoodROE = data?.ROE > 12;
-  const isGoodLCOE = data?.LCOE != null && data.LCOE < 5000;
+  const isGoodROI = data?.ROI_years != null && data.ROI_years < 999 && data.ROI_years < 10; // Good if payback < 10 years
+  const isGoodROE = data?.ROE_years != null && data.ROE_years < 999 && data.ROE_years < 8; // Good if equity payback < 8 years
+  const isGoodLCOE = data?.LCOE_kwh != null && data.LCOE_kwh < 5.0; // Good if LCOE < ₱5/kWh
 
   // Prepare chart data (simple annual view)
   const chartData = data ? [
@@ -58,18 +58,19 @@ function FinancialTable({ data, loading }) {
       {/* Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard 
-          label="LCOE" 
+          label="LCOE (₱/kWh)" 
           value={lcoe} 
-          color={isGoodLCOE ? "text-green-600" : "text-amber-600"} 
+          color={isGoodLCOE ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"} 
         />
         <StatCard 
-          label="ROI" 
+          label="Project Payback" 
           value={roi} 
-          color={isGoodROI ? "text-green-600" : "text-amber-600"} 
+          color={isGoodROI ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"} 
         />
         <StatCard 
-          label="Capex" 
-          value={totalCapex} 
+          label="Equity Payback" 
+          value={roe} 
+          color={isGoodROE ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"} 
         />
         <StatCard 
           label="Net Profit" 
@@ -160,15 +161,15 @@ function FinancialTable({ data, loading }) {
                   <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{netProfit}</td>
                 </tr>
                 <tr className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
-                  <td className="py-3 px-4 text-gray-600 dark:text-white">ROI</td>
+                  <td className="py-3 px-4 text-gray-600 dark:text-white">Project Payback</td>
                   <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{roi}</td>
                 </tr>
                 <tr className="border-b border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800">
-                  <td className="py-3 px-4 text-gray-600 dark:text-white">ROE</td>
+                  <td className="py-3 px-4 text-gray-600 dark:text-white">Equity Payback</td>
                   <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{roe}</td>
                 </tr>
                 <tr className="bg-white dark:bg-gray-800">
-                  <td className="py-3 px-4 text-gray-600 dark:text-white">LCOE</td>
+                  <td className="py-3 px-4 text-gray-600 dark:text-white">LCOE (₱/kWh)</td>
                   <td className="py-3 px-4 text-right font-mono font-semibold text-gray-900 dark:text-white">{lcoe}</td>
                 </tr>
               </tbody>

@@ -133,7 +133,7 @@ function App() {
     hardCosts: 1000000,
     softCosts: 500000,
     production: 1000,
-    annualRevenue: 10000000,
+    tariff: 5.25,
     annualOpex: 2000000,
     taxRate: 0.25,
     interestRate: 0.08,
@@ -176,10 +176,10 @@ function App() {
         // Accounting format fields - explicitly strip commas
         hard_costs: cleanValue(debouncedInputs.hardCosts),
         soft_costs: cleanValue(debouncedInputs.softCosts),
-        annual_revenue: cleanValue(debouncedInputs.annualRevenue),
         annual_opex: cleanValue(debouncedInputs.annualOpex),
         // Other fields
         annual_production_mwh: cleanValue(debouncedInputs.production),
+        tariff_php_per_kwh: cleanValue(debouncedInputs.tariff),
         tax_rate: cleanValue(debouncedInputs.taxRate),
         interest_rate: cleanValue(debouncedInputs.interestRate),
         debt_share: cleanValue(debouncedInputs.debtShare),
@@ -239,11 +239,11 @@ function App() {
                 unit="MWh" 
               />
               <SmartInput 
-                label="Revenue (₱)" 
-                value={inputs.annualRevenue} 
-                onChange={v => updateField('annualRevenue', v)} 
-                unit="₱"
-                useAccountingFormat={true}
+                label="Tariff (₱/kWh)" 
+                value={inputs.tariff} 
+                onChange={v => updateField('tariff', v)} 
+                unit="₱/kWh"
+                step="0.01"
               />
               <SmartInput 
                 label="Opex (₱)" 
